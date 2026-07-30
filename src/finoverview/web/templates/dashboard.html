@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Overview — {{ summary.net_worth | money }} {{ base }}{% endblock %}
+
+{% block content %}
+
+<section class="headline">
+  <p class="eyebrow">Net worth</p>
+  <p class="figure">{{ summary.net_worth | money }} <span class="ccy">{{ base }}</span></p>
+  <ul class="deltas">
+    {% for label, ch in changes.items() %}
+    <li>
+      <span class="delta-label">{{ label }}</span>
+      {% if ch %}
+      <span class="num {{ 'up' if ch.abs >= 0 else 'down' }}">
+        {{ ch.abs | signed }}
+        {% if ch.pct is not none %}<small>{{ ch.pct | pct }}</small>{% endif %}
+      </span>
+      {% else %}<span class="num dim">—</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {{ chart | safe }}
+</section>
+
+<section>
+  <h2>Composition</h2>
+  <table class="data">
+    <tbody>
+      <tr><th scope="row">Invested</th><td class="num">{{ summary.invested | money }}</td></tr>
+      <tr><th scope="row">Cash</th><td class="num">{{ summary.cash | money }}</td></tr>
+      <tr class="emph"><th scope="row">Available
+        <small>liquid, unencumbered</small></th>
+        <td class="num">{{ summary.available | money }}</td></tr>
+      {% if summary.encumbered %}
+      <tr><th scope="row">Encumbered
+        <small>collateral — counts as net worth, not spendable</small></th>
+        <td class="num dim">{{ summary.encumbered | money }}</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Accounts</h2>
+  <table class="data">
+    <thead><tr><th>Account</th><th>Institution</th><th class="num">Balance</th><th>As of</th></tr></thead>
+    <tbody>
+      {% for a in summary.accounts %}
+      <tr>
+        <td>{{ a.label }}{% if a.encumbered %} <span class="tag">collateral</span>{% endif %}{% if not a.liquid %} <span class="tag">illiquid</span>{% endif %}</td>
+        <td class="dim">{{ a.institution or a.provider }}</td>
+        <td class="num">{{ a.amount_base | money }}</td>
+        <td class="dim mono small">{{ a.ts[:16] | replace("T", " ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Portfolio performance
+    <span class="range">
+      {% for d, l in [(30, "30d"), (90, "90d"), (365, "1y"), (1825, "5y")] %}
+      <a href="/?window={{ d }}" {% if window == d %}aria-current="true"{% endif %}>{{ l }}</a>
+      {% endfor %}
+    </span>
+  </h2>
+
+  {% if returns.warnings %}
+  {% for w in returns.warnings %}<p class="note">{{ w }}</p>{% endfor %}
+  {% endif %}
+
+  <table class="data">
+    <tbody>
+      <tr><th scope="row">Time-weighted return
+          <small>performance of the assets — compare this to an index</small></th>
+        <td class="num {{ 'up' if returns.twr and returns.twr >= 0 else 'down' if returns.twr else '' }}">
+          {{ returns.twr | pct }}</td></tr>
+      <tr><th scope="row">Money-weighted return
+          <small>your outcome, including the timing of contributions</small></th>
+        <td class="num {{ 'up' if returns.mwr and returns.mwr >= 0 else 'down' if returns.mwr else '' }}">
+          {{ returns.mwr | pct }}</td></tr>
+      <tr><th scope="row">Contributed</th>
+        <td class="num">{{ returns.net_contributions | money }}</td></tr>
+      <tr><th scope="row">Gain</th>
+        <td class="num {{ 'up' if returns.gain >= 0 else 'down' }}">{{ returns.gain | money }}</td></tr>
+      {% if drawdown %}
+      <tr><th scope="row">Max drawdown
+          <small>{{ drawdown.peak_date }} → {{ drawdown.trough_date }}</small></th>
+        <td class="num down">{{ drawdown.pct | pct }}</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+  <p class="meta">Window {{ returns.start or "—" }} → {{ returns.end or "—" }}</p>
+</section>
+
+{% if breakdown.position_count %}
+<section class="split">
+  {% for key, title in [("by_asset_class", "Asset class"), ("by_currency", "Currency"),
+                        ("by_country", "Country"), ("by_account", "Account")] %}
+  {% if bars[key] %}
+  <div>
+    <h3>{{ title }}</h3>
+    <ul class="bars">
+      {% for b in bars[key] %}
+      <li>
+        <span class="bar-label">{{ b.label }}</span>
+        <span class="bar-track"><span class="bar-fill" style="width:{{ "%.1f"|format(b.width) }}%"></span></span>
+        <span class="num small">{{ "%.1f"|format(b.pct) }}%</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% endfor %}
+</section>
+
+<section>
+  <h2>Concentration</h2>
+  <table class="data">
+    <tbody>
+      <tr><th scope="row">Top 5 share</th>
+        <td class="num">{{ "%.1f"|format(concentration.top_n_pct) }}%</td></tr>
+      <tr><th scope="row">Effective holdings
+          <small>1 / Herfindahl index — how many equally-sized holdings this is
+          equivalent to, across {{ breakdown.position_count }} actual positions</small></th>
+        <td class="num">{{ "%.1f"|format(concentration.effective_holdings) }}</td></tr>
+    </tbody>
+  </table>
+  <ul class="bars tight">
+    {% for t in concentration.top %}
+    <li>
+      <span class="bar-label">{{ t.symbol }} <small class="dim">{{ t.name }}</small></span>
+      <span class="bar-track"><span class="bar-fill" style="width:{{ "%.1f"|format(t.pct) }}%"></span></span>
+      <span class="num small">{{ "%.1f"|format(t.pct) }}%</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if recurring.lines %}
+<section>
+  <h2>Recurring, monthly</h2>
+  <table class="data">
+    <tbody>
+      <tr><th scope="row">Income</th><td class="num">{{ recurring.monthly_income | money }}</td></tr>
+      <tr><th scope="row">Cost</th><td class="num">{{ recurring.monthly_cost | money }}</td></tr>
+      <tr class="emph"><th scope="row">Net{% if recurring.savings_rate_pct is not none %}
+          <small>savings rate {{ "%.1f"|format(recurring.savings_rate_pct) }}%</small>{% endif %}</th>
+        <td class="num {{ 'up' if recurring.monthly_net >= 0 else 'down' }}">
+          {{ recurring.monthly_net | money }}</td></tr>
+    </tbody>
+  </table>
+  <details>
+    <summary>{{ recurring.lines | length }} items</summary>
+    <table class="data">
+      <tbody>
+      {% for i in recurring.lines %}
+        <tr><th scope="row">{{ i.label }} <small class="dim">{{ i.category or i.kind }} · {{ i.period }}</small></th>
+          <td class="num {{ 'up' if i.kind == 'income' else '' }}">{{ i.monthly | money }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </details>
+</section>
+{% endif %}
+
+{% endblock %}

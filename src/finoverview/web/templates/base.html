@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en" data-overall="{{ overall }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>{% block title %}Finance overview{% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+</head>
+<body>
+
+{# The source-health strip. Always visible, on every page, above the numbers.
+   A dashboard serving stale balances without saying so is worse than no
+   dashboard, because you'll act on it. #}
+<header class="health" aria-label="Data source status">
+  <div class="health-inner">
+    <span class="overall {{ overall }}">{{ overall }}</span>
+    <ul class="sources">
+      {% for c in collectors %}
+      <li class="src {{ c.status }}" {% if c.error %}title="{{ c.error }}"{% endif %}>
+        <span class="dot" aria-hidden="true"></span>
+        <span class="src-name">{{ c.name }}</span>
+        <span class="src-age">{{ c.age }}</span>
+      </li>
+      {% endfor %}
+      {% for c in consents %}
+      <li class="src consent-{{ c.status }}">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="src-name">{{ c.institution }} consent</span>
+        <span class="src-age">{% if c.days_left is not none %}{{ "%.0f"|format(c.days_left) }}d{% else %}?{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% if overall in ("error", "stale") %}
+  <p class="health-msg">Some figures below are out of date. Check
+    <code>finoverview status</code> on the host.</p>
+  {% endif %}
+  {% for c in consents if c.status in ("expiring", "expired") %}
+  <p class="health-msg">{{ c.institution }} bank consent
+    {% if c.status == "expired" %}has expired{% else %}expires in
+    {{ "%.0f"|format(c.days_left) }} days{% endif %} — re-run
+    <code>python -m finoverview.auth.eb_link</code>.</p>
+  {% endfor %}
+</header>
+
+<nav aria-label="Sections">
+  <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Overview</a>
+  <a href="/positions" {% if request.url.path == "/positions" %}aria-current="page"{% endif %}>Positions</a>
+  <a href="/projection" {% if request.url.path == "/projection" %}aria-current="page"{% endif %}>Projection</a>
+</nav>
+
+<main>
+{% block content %}{% endblock %}
+</main>
+
+<footer>
+  <span>finance-overview {{ version }}</span>
+  <span>all figures in {{ base }}</span>
+</footer>
+
+<script src="/static/app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+[Unit]
+Description=finance-overview encrypted backup
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=finoverview
+WorkingDirectory=/opt/finoverview
+EnvironmentFile=/etc/finoverview/env
+ExecStart=/opt/finoverview/scripts/backup.sh

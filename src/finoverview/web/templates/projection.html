@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Projection{% endblock %}
+
+{% block content %}
+<section class="headline compact">
+  <p class="eyebrow">Projection · median outcome</p>
+  <p class="figure">{{ terminal.p50 | money }} <span class="ccy">{{ base }}</span></p>
+  <p class="meta">from {{ start | money }} today, {{ monthly_contribution | money }}/month ·
+    p10 {{ terminal.p10 | money }} · p90 {{ terminal.p90 | money }}</p>
+</section>
+
+<section>
+  {{ chart | safe }}
+  <p class="legend">
+    <span class="key band-outer"></span> 10–90th percentile
+    <span class="key band-inner"></span> 25–75th
+    <span class="key line-median"></span> median
+    <span class="key line-det"></span> deterministic
+  </p>
+</section>
+
+{# Assumptions sit next to the chart, not buried in a config file. A projection is
+   an assumption engine with arithmetic attached; hiding the inputs would make the
+   output look like a forecast. #}
+<section>
+  <h2>Assumptions</h2>
+  <table class="data">
+    <tbody>
+      {% for label, value in assumptions %}
+      <tr><th scope="row">{{ label }}</th><td class="num">{{ value }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="note">{{ note }} Edit these in <code>config/assets.toml</code> under
+    <code>[projection]</code>. Returns are modelled as independent lognormal annual
+    draws, which understates the chance of long consecutive drawdowns — treat the
+    lower band as optimistic rather than a floor.</p>
+</section>
+
+<section>
+  <h2>Percentile paths</h2>
+  <table class="data wide">
+    <thead><tr><th class="num">Year</th><th class="num">p10</th><th class="num">p25</th>
+      <th class="num">Median</th><th class="num">p75</th><th class="num">p90</th>
+      <th class="num">Deterministic</th></tr></thead>
+    <tbody>
+      {% for b in bands %}
+      {% if b.year % 5 == 0 or loop.last %}
+      <tr>
+        <td class="num mono">{{ b.year }}</td>
+        <td class="num dim">{{ b.p10 | money }}</td>
+        <td class="num dim">{{ b.p25 | money }}</td>
+        <td class="num">{{ b.p50 | money }}</td>
+        <td class="num dim">{{ b.p75 | money }}</td>
+        <td class="num dim">{{ b.p90 | money }}</td>
+        <td class="num dim">{{ det_map.get(b.year, 0) | money }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

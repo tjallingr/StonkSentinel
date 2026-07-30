@@ -1,0 +1,58 @@
+# Copy to settings.toml and fill in. settings.toml is gitignored.
+# Secrets can live here or in environment variables; env wins.
+
+[general]
+db_path       = "data/finance.db"
+base_currency = "EUR"
+secrets_dir   = "secrets"
+
+# How old a source's last successful run may be before the dashboard flags it.
+# These are the numbers that decide whether you get warned; tune them to your
+# timer schedule, not to what feels comfortable.
+[general.stale_after_hours]
+saxo          = 8
+enablebanking = 30
+fx            = 30
+manual        = 960          # only changes when you edit assets.toml
+
+
+# --------------------------------------------------------------------------
+# Enable Banking (Rabobank, KBC)
+#
+# Register a PRODUCTION application, then activate it via
+# "Activate by linking accounts" in the control panel. That is Restricted
+# Production: free, your own accounts only, which is exactly this use case.
+#
+# app_id is the application UUID. The RSA private key is downloadable ONCE at
+# registration — back it up somewhere other than the Pi.
+# --------------------------------------------------------------------------
+[enablebanking]
+app_id           = ""                              # or env ENABLEBANKING_APP_ID
+private_key_path = "secrets/enablebanking.pem"     # or env ENABLEBANKING_KEY_PATH
+
+# Must EXACTLY match one of the redirect URLs registered with the application,
+# trailing slash included.
+redirect_url = "http://localhost:8080/eb/callback"
+
+# Bank names must match Enable Banking's ASPSP list exactly. Check with:
+#   python -m finoverview.auth.eb_link --list --country NL
+[[enablebanking.banks]]
+name    = "Rabobank"
+country = "NL"
+
+[[enablebanking.banks]]
+name    = "KBC"
+country = "BE"
+
+
+# --------------------------------------------------------------------------
+# Saxo OpenAPI
+#
+# Create a LIVE app at https://www.developer.saxo. Grant type: Code.
+# The redirect URL must match the app registration exactly.
+# --------------------------------------------------------------------------
+[saxo]
+live         = true
+app_key      = ""                                  # or env SAXO_APP_KEY
+app_secret   = ""                                  # or env SAXO_APP_SECRET
+redirect_url = "http://localhost:8080/saxo/callback"

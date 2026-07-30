@@ -1,0 +1,14 @@
+# Fired by OnFailure= when a collector fails. Replace ExecStart with whatever
+# you actually read: ntfy, Gotify, Telegram, msmtp. The default writes to the
+# journal, which is better than nothing but only if you look at it — so wire up
+# a real channel. A silent collector failure is the failure mode of this project.
+[Unit]
+Description=finance-overview failure notification (%i)
+
+[Service]
+Type=oneshot
+User=finoverview
+EnvironmentFile=-/etc/finoverview/env
+ExecStart=/bin/sh -c 'echo "finoverview collector %i FAILED on $(hostname) at $(date -Is)" | systemd-cat -t finoverview -p err'
+# Example with ntfy:
+# ExecStart=/usr/bin/curl -fsS -d "collector %i failed on $(hostname)" https://ntfy.sh/YOUR-PRIVATE-TOPIC

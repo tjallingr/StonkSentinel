@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Positions{% endblock %}
+
+{% block content %}
+<section class="headline compact">
+  <p class="eyebrow">Positions</p>
+  <p class="figure">{{ total | money }} <span class="ccy">{{ base }}</span></p>
+  <p class="meta">{{ positions | length }} holdings
+    {% if positions %}· as of {{ positions[0].ts[:16] | replace("T", " ") }}{% endif %}</p>
+</section>
+
+<section>
+{% if not positions %}
+  <p class="note">No positions yet. Run <code>finoverview collect --only saxo</code>.</p>
+{% else %}
+  <table class="data wide">
+    <thead>
+      <tr>
+        <th>Symbol</th><th>Name</th><th>Class</th>
+        <th class="num">Qty</th><th class="num">Price</th>
+        <th class="num">Value ({{ base }})</th><th class="num">Unrealised</th><th class="num">Weight</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in positions %}
+      <tr>
+        <td class="mono">{{ p.symbol }}</td>
+        <td class="dim">{{ p.name or "" }}</td>
+        <td class="dim small">{{ p.asset_class }}</td>
+        <td class="num small">{{ "%g"|format(p.quantity) }}</td>
+        <td class="num small">{{ "%.4f"|format(p.last_price) if p.last_price else "—" }}
+          <small class="dim">{{ p.currency }}</small></td>
+        <td class="num">{{ p.value | money }}</td>
+        <td class="num {{ 'up' if p.unrealized_pl >= 0 else 'down' }}">{{ p.unrealized_pl | money }}</td>
+        <td class="num small dim">{{ "%.1f"|format(p.value / total * 100) if total else "—" }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+</section>
+{% endblock %}

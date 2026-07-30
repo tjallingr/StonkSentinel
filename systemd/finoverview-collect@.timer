@@ -1,0 +1,14 @@
+[Unit]
+Description=Schedule for finance-overview collector (%i)
+
+[Timer]
+# Overridden per instance by drop-ins; see README. Default: every 4 hours.
+OnCalendar=*-*-* 00/4:07:00
+# Catch up after downtime. Critical for saxo: the refresh token has a ~24h
+# lifetime, so a missed run is not merely late, it can cost you the connection.
+Persistent=true
+RandomizedDelaySec=180
+AccuracySec=1m
+
+[Install]
+WantedBy=timers.target

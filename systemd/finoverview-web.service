@@ -1,0 +1,35 @@
+[Unit]
+Description=finance-overview dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=finoverview
+Group=finoverview
+WorkingDirectory=/opt/finoverview
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/finoverview/src
+EnvironmentFile=-/etc/finoverview/env
+# Bind to loopback only. Tailscale serve handles TLS and exposure; nothing here
+# should ever listen on 0.0.0.0.
+ExecStart=/opt/finoverview/.venv/bin/uvicorn finoverview.web.app:app \
+    --host 127.0.0.1 --port 8080 --workers 1 --no-access-log
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+ReadWritePaths=/opt/finoverview/data
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target

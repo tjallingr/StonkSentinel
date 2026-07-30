@@ -1,0 +1,43 @@
+# Templated per-collector unit: finoverview-collect@saxo.service, @enablebanking, @fx, @manual.
+#
+# systemd rather than cron, for three reasons that matter here: OnFailure= hooks so
+# a failure can page you, journald logs you can actually grep, and Persistent=true
+# so a missed run catches up after the Pi has been off. Cron gives you silent
+# failure, which for this project means quietly stale numbers you'll still trust.
+[Unit]
+Description=finance-overview collector (%i)
+After=network-online.target
+Wants=network-online.target
+OnFailure=finoverview-alert@%i.service
+
+[Service]
+Type=oneshot
+User=finoverview
+Group=finoverview
+WorkingDirectory=/opt/finoverview
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/finoverview/src
+EnvironmentFile=-/etc/finoverview/env
+ExecStart=/opt/finoverview/.venv/bin/python -m finoverview.cli collect --only %i
+
+# Transient network failures are the common case; retry before alerting.
+Restart=on-failure
+RestartSec=180
+
+# Hardening. This process reads bank data and holds OAuth refresh tokens.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+ReadWritePaths=/opt/finoverview/data
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
