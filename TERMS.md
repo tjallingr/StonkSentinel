@@ -1,8 +1,6 @@
 # Terms of Use
 
 **Application:** stonksentinel (self-hosted personal finance overview)
-**Last updated:** 30 July 2026
-**Contact:** _<your email address>_
 
 ## 1. Nature of the application
 
@@ -34,7 +32,7 @@ summaries, historical charts, performance figures and projections.
 
 All figures, returns and projections shown are informational and may be
 incomplete, delayed or wrong. Projections are model outputs based on assumptions
-chosen by the operator; they are not forecasts and carry no predictive weight.
+chosen by myself; they are not forecasts and carry no predictive weight.
 Nothing produced by this application should be relied upon for any financial
 decision. Authoritative balances and positions are those reported by the relevant
 bank or broker.
@@ -48,7 +46,7 @@ re-authentication, during which figures will be stale.
 
 ## 7. Access authorisation
 
-Access to account information requires the operator's explicit consent, granted
+Access to account information requires my explicit consent, granted
 directly to the relevant bank through Strong Customer Authentication. Consent is
 time-limited, read-only in scope, and may be withdrawn at any time through the
 bank's own channels or by deleting the stored session.
