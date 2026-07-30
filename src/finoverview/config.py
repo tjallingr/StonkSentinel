@@ -12,7 +12,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Populate os.environ from .env before anything reads it below. Real environment
+# variables (e.g. set by systemd) still win — load_dotenv never overrides existing keys.
+load_dotenv(REPO_ROOT / ".env")
+
 DEFAULT_CONFIG_DIR = Path(os.environ.get("FINOVERVIEW_CONFIG", REPO_ROOT / "config"))
 
 

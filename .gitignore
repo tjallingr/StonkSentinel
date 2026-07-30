@@ -13,6 +13,8 @@ data/
 
 assets.toml
 
+finance.db
+
 enablebanking.pem
 
 .venv/
