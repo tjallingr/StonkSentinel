@@ -14,14 +14,16 @@ import sqlite3
 from pathlib import Path
 
 from fastapi import FastAPI, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import db
 from ..config import load_assets, load_settings
-from ..metrics import allocation, health, networth, projection, returns
-from .charts import area_chart, bar_rows, band_chart
+from ..metrics import allocation, health, networth, projection, returns, saxo_projection
+from ..metrics.saxo_projection.categories import load_categories
+from .charts import area_chart, bar_rows, band_chart, pie_chart
+from .settings_store import parse_categories_form, save_categories
 
 HERE = Path(__file__).parent
 
@@ -74,6 +76,7 @@ def dashboard(request: Request, window: int = Query(365, ge=7, le=3650)):
 
         ret = returns.compute(conn, base, days=window)
         breakdown = allocation.breakdown(conn, base)
+        class_rows = allocation.net_worth_by_class(conn, base)
         conc = allocation.concentration(conn, base)
         rec = allocation.recurring_summary(conn, base)
         dd = returns.max_drawdown(series)
@@ -95,7 +98,9 @@ def dashboard(request: Request, window: int = Query(365, ge=7, le=3650)):
                 "returns": ret,
                 "breakdown": breakdown,
                 "bars": {k: bar_rows(v) for k, v in breakdown.items()
-                         if k.startswith("by_")},
+                         if k.startswith("by_") and k != "by_asset_class"},
+                "class_rows": class_rows,
+                "class_pie": pie_chart(class_rows),
                 "concentration": conc,
                 "recurring": rec,
                 "drawdown": dd,
@@ -140,24 +145,68 @@ def projection_page(request: Request):
         det = out["deterministic"]
         collector_rows = health.collectors(conn, settings.stale_after_hours)
         consent_rows = health.consents(conn)
+
+        sp = saxo_projection.run(conn, base, assets, out["assumptions"].years)
+        sp_total_start = sp["total"][0] or 1
+        sp_bars = bar_rows([
+            {"label": c.label, "value": sp["start_values"][c.key],
+             "pct": sp["start_values"][c.key] / sp_total_start * 100}
+            for c in sp["categories"] if sp["start_values"][c.key]
+        ])
+        sp_rows = [
+            {"label": c.label, "rate": c.expected_real_return_pct,
+             "start": sp["start_values"][c.key], "end": sp["series"][c.key][-1]}
+            for c in sp["categories"] if sp["start_values"][c.key]
+        ]
+
         return templates.TemplateResponse(
             request, "projection.html",
             {"base": base,
              "assumptions": out["assumptions"].as_display(),
              "bands": bands,
-             "deterministic": det,
-             "det_map": {d["year"]: d["value"] for d in det},
              "terminal": out["monte_carlo"]["terminal"],
              "monthly_contribution": out["monte_carlo"]["monthly_contribution"],
              "start": out["monte_carlo"]["start"],
              "chart": band_chart(bands, det, width=1040, height=260),
              "note": out["monte_carlo"]["note"],
+             "saxo_bars": sp_bars,
+             "saxo_rows": sp_rows,
+             "saxo_years": out["assumptions"].years,
+             "saxo_total_start": sp["total"][0],
+             "saxo_total_end": sp["total"][-1],
              "collectors": collector_rows,
              "consents": consent_rows,
              "overall": health.overall(collector_rows, consent_rows)},
         )
     finally:
         conn.close()
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request):
+    conn = get_conn()
+    try:
+        assets = load_assets(settings.config_dir)
+        fallback_pct = float(assets.projection.get("expected_real_return_pct", 5.0))
+        categories = load_categories(assets.saxo_projection_categories, fallback_pct)
+        collector_rows = health.collectors(conn, settings.stale_after_hours)
+        consent_rows = health.consents(conn)
+        return templates.TemplateResponse(
+            request, "settings.html",
+            {"categories": categories,
+             "collectors": collector_rows,
+             "consents": consent_rows,
+             "overall": health.overall(collector_rows, consent_rows)},
+        )
+    finally:
+        conn.close()
+
+
+@app.post("/settings/saxo-projection")
+async def save_saxo_projection_settings(request: Request):
+    form = await request.form()
+    save_categories(settings.config_dir, parse_categories_form(form))
+    return RedirectResponse("/settings", status_code=303)
 
 
 @app.get("/health")

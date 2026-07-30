@@ -23,6 +23,12 @@
   --warn:   #cf9b3f;
   --accent: #5c8ce0;
 
+  --cat-equity:  #3987e5;
+  --cat-bonds:   #d95926;
+  --cat-cash:    #199e70;
+  --cat-savings: #c98500;
+  --cat-other:   #d55181;
+
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
           "Liberation Mono", monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
@@ -45,6 +51,12 @@
     --down:      #b4453b;
     --warn:      #9a6f16;
     --accent:    #2f5fb0;
+
+    --cat-equity:  #2a78d6;
+    --cat-bonds:   #eb6834;
+    --cat-cash:    #1baf7a;
+    --cat-savings: #eda100;
+    --cat-other:   #e87ba4;
   }
 }
 
@@ -350,6 +362,20 @@ svg.chart .line.deterministic {
 .key.line-det {
   height: 0; border-top: 2px dashed var(--dim); background: none;
 }
+.key.cat-equity  { background: var(--cat-equity); }
+.key.cat-bonds   { background: var(--cat-bonds); }
+.key.cat-cash    { background: var(--cat-cash); }
+.key.cat-savings { background: var(--cat-savings); }
+.key.cat-other   { background: var(--cat-other); }
+
+.pie-wrap { display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+svg.chart.pie { width: 180px; height: 180px; flex: none; }
+.pie-total {
+  font: 600 15px/1 var(--sans); fill: var(--text);
+}
+.pie-legend { display: flex; flex-direction: column; gap: 0.5rem; font: 13px/1.2 var(--sans); }
+.pie-legend li { display: flex; align-items: center; gap: 0.5rem; list-style: none; }
+.pie-legend .num { margin-left: auto; }
 
 /* --------------------------------------------------------------------- notes */
 
@@ -388,6 +414,33 @@ footer {
   font: 11px/1 var(--mono);
   color: var(--faint);
 }
+
+/* ------------------------------------------------------------------ forms */
+
+table.form input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font: inherit;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+}
+
+table.form input[type="number"] { text-align: right; }
+
+button.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.5rem 1.1rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button.primary:hover { opacity: 0.9; }
 
 /* ------------------------------------------------------------------ a11y/misc */
 

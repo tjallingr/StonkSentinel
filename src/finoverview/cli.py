@@ -18,7 +18,7 @@ from pathlib import Path
 from . import db
 from .collectors import ALL, get_collector
 from .config import load_assets, load_settings
-from .metrics import allocation, health, networth, projection, returns
+from .metrics import allocation, health, networth, projection, returns, saxo_projection
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -142,6 +142,15 @@ def cmd_project(args, settings, conn) -> int:
             continue
         print(f"  {band['year']:>5} {band['p10']:>14,.0f} {band['p50']:>14,.0f} "
               f"{band['p90']:>14,.0f} {det.get(band['year'], 0):>14,.0f}")
+
+    sp = saxo_projection.run(conn, settings.base_currency, assets, a.years)
+    print(f"\nSAXO ASSET PROJECTION ({settings.base_currency}, real terms)")
+    for category in sp["categories"]:
+        start = sp["start_values"][category.key]
+        end = sp["series"][category.key][-1]
+        print(f"  {category.label:<24} {start:>14,.0f} -> {end:>14,.0f}  "
+              f"({category.expected_real_return_pct:.1f}%/yr)")
+    print(f"  {'Total':<24} {sp['total'][0]:>14,.0f} -> {sp['total'][-1]:>14,.0f}")
     return 0
 
 

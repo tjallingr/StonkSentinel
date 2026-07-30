@@ -94,9 +94,28 @@
   <p class="meta">Window {{ returns.start or "—" }} → {{ returns.end or "—" }}</p>
 </section>
 
+{% if class_rows %}
+<section>
+  <h2>Composition by class</h2>
+  <div class="pie-wrap">
+    {{ class_pie | safe }}
+    <ul class="pie-legend">
+      {% for r in class_rows %}
+      <li>
+        <span class="key cat-{{ r.label | lower }}"></span>
+        <span>{{ r.label }}</span>
+        <span class="num small dim">{{ "%.1f"|format(r.pct) }}%</span>
+        <span class="num small">{{ r.value | money }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endif %}
+
 {% if breakdown.position_count %}
 <section class="split">
-  {% for key, title in [("by_asset_class", "Asset class"), ("by_currency", "Currency"),
+  {% for key, title in [("by_currency", "Currency"),
                         ("by_country", "Country"), ("by_account", "Account")] %}
   {% if bars[key] %}
   <div>

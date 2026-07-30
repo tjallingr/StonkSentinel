@@ -152,3 +152,43 @@ seed                     = 42        # remove for a different draw each run
 
 # Omit monthly_contribution to derive it from your recurring income minus costs.
 # monthly_contribution = 800.00
+
+
+# --------------------------------------------------------------------------
+# Saxo asset projection.
+#
+# Buckets current Saxo holdings by ticker symbol into named categories, each
+# compounded at its own expected_real_return_pct, then summed. Distinct from
+# [projection] above: that one is the blended total, this one is the
+# composition. Symbols, not ISINs: Saxo's netpositions payload doesn't return
+# ISIN for these instruments, only Symbol (e.g. "IWDA:xams" -> match "IWDA").
+#
+# Any Saxo position whose symbol isn't listed below falls into "other", which
+# defaults to [projection].expected_real_return_pct unless defined here too.
+# Saxo cash balance always falls into "cash", which defaults to 0.0 unless
+# defined here.
+# --------------------------------------------------------------------------
+
+[[saxo_projection_category]]
+key                      = "world_equity"
+label                    = "World Equity ETF"
+expected_real_return_pct = 5.0
+symbols                  = ["IWDA"]
+
+[[saxo_projection_category]]
+key                      = "em_equity"
+label                    = "Emerging Markets ETF"
+expected_real_return_pct = 4.0
+symbols                  = ["IEMA"]
+
+[[saxo_projection_category]]
+key                      = "bonds"
+label                    = "Bonds"
+expected_real_return_pct = 1.5
+symbols                  = ["GERMANY-0.5-15AUG27"]
+
+[[saxo_projection_category]]
+key                      = "cash"
+label                    = "Cash"
+expected_real_return_pct = 0.0
+symbols                  = []

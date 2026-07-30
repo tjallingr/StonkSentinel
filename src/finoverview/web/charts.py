@@ -10,9 +10,18 @@ without re-rendering.
 
 from __future__ import annotations
 
+import math
 from html import escape
 
 PAD_L, PAD_R, PAD_T, PAD_B = 8, 8, 10, 18
+
+CLASS_COLOR_VAR = {
+    "Equity": "--cat-equity",
+    "Bonds": "--cat-bonds",
+    "Cash": "--cat-cash",
+    "Savings": "--cat-savings",
+    "Other": "--cat-other",
+}
 
 
 def _nice_ticks(lo: float, hi: float, count: int = 4) -> list[float]:
@@ -162,6 +171,62 @@ def band_chart(bands: list[dict], deterministic: list[dict],
         f'<polyline points="{median}" class="line median"/>'
         f'<polyline points="{det}" class="line deterministic"/>'
         f'{"".join(xlabels)}'
+        f'</svg>'
+    )
+
+
+def _point(cx: float, cy: float, r: float, angle_deg: float) -> tuple[float, float]:
+    a = math.radians(angle_deg)
+    return cx + r * math.sin(a), cy - r * math.cos(a)
+
+
+def _wedge_path(cx: float, cy: float, r_outer: float, r_inner: float,
+                theta1: float, theta2: float) -> str:
+    large_arc = 1 if (theta2 - theta1) > 180 else 0
+    x1o, y1o = _point(cx, cy, r_outer, theta1)
+    x2o, y2o = _point(cx, cy, r_outer, theta2)
+    x1i, y1i = _point(cx, cy, r_inner, theta1)
+    x2i, y2i = _point(cx, cy, r_inner, theta2)
+    return (
+        f"M {x1o:.2f} {y1o:.2f} "
+        f"A {r_outer:.2f} {r_outer:.2f} 0 {large_arc} 1 {x2o:.2f} {y2o:.2f} "
+        f"L {x2i:.2f} {y2i:.2f} "
+        f"A {r_inner:.2f} {r_inner:.2f} 0 {large_arc} 0 {x1i:.2f} {y1i:.2f} Z"
+    )
+
+
+def pie_chart(rows: list[dict], width: int = 200, height: int = 200) -> str:
+    """Donut of a small fixed category set. Wedges render in the caller's given
+    order, never re-sorted by value — the color-to-category mapping is fixed, and
+    resorting would also shuffle which categories sit next to each other, which is
+    the one thing validated against the palette's contrast checks."""
+    if not rows:
+        return (f'<svg viewBox="0 0 {width} {height}" class="chart pie" role="img" '
+                f'aria-label="No holdings yet"></svg>')
+
+    cx, cy = width / 2, height / 2
+    r_outer = min(width, height) / 2 - 4
+    r_inner = r_outer * 0.6
+    total = sum(r["value"] for r in rows) or 1
+
+    angle = 0.0
+    wedges = []
+    for r in rows:
+        sweep = r["value"] / total * 360
+        color = f"var({CLASS_COLOR_VAR.get(r['label'], '--faint')})"
+        path = _wedge_path(cx, cy, r_outer, r_inner, angle, angle + sweep)
+        wedges.append(
+            f'<path d="{path}" fill="{color}" stroke="var(--surface)" stroke-width="2">'
+            f'<title>{escape(r["label"])} — {r["pct"]:.1f}%</title></path>'
+        )
+        angle += sweep
+
+    return (
+        f'<svg viewBox="0 0 {width} {height}" class="chart pie" role="img" '
+        f'aria-label="Composition by class">'
+        + "".join(wedges) +
+        f'<text x="{cx}" y="{cy}" text-anchor="middle" dominant-baseline="middle" '
+        f'class="pie-total">{total:,.0f}</text>'
         f'</svg>'
     )
 

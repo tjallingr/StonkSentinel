@@ -37,27 +37,41 @@
     lower band as optimistic rather than a floor.</p>
 </section>
 
+{% if saxo_rows %}
 <section>
-  <h2>Percentile paths</h2>
-  <table class="data wide">
-    <thead><tr><th class="num">Year</th><th class="num">p10</th><th class="num">p25</th>
-      <th class="num">Median</th><th class="num">p75</th><th class="num">p90</th>
-      <th class="num">Deterministic</th></tr></thead>
+  <h2>Saxo asset projection</h2>
+  <ul class="bars">
+    {% for b in saxo_bars %}
+    <li>
+      <span class="bar-label">{{ b.label }}</span>
+      <span class="bar-track"><span class="bar-fill" style="width:{{ "%.1f"|format(b.width) }}%"></span></span>
+      <span class="num small">{{ "%.1f"|format(b.pct) }}%</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <table class="data">
+    <thead><tr><th>Category</th><th class="num">Rate</th>
+      <th class="num">Today</th><th class="num">In {{ saxo_years }} years</th></tr></thead>
     <tbody>
-      {% for b in bands %}
-      {% if b.year % 5 == 0 or loop.last %}
+      {% for r in saxo_rows %}
       <tr>
-        <td class="num mono">{{ b.year }}</td>
-        <td class="num dim">{{ b.p10 | money }}</td>
-        <td class="num dim">{{ b.p25 | money }}</td>
-        <td class="num">{{ b.p50 | money }}</td>
-        <td class="num dim">{{ b.p75 | money }}</td>
-        <td class="num dim">{{ b.p90 | money }}</td>
-        <td class="num dim">{{ det_map.get(b.year, 0) | money }}</td>
+        <th scope="row">{{ r.label }}</th>
+        <td class="num dim">{{ "%.1f"|format(r.rate) }}%</td>
+        <td class="num dim">{{ r.start | money }}</td>
+        <td class="num">{{ r.end | money }}</td>
       </tr>
-      {% endif %}
       {% endfor %}
+      <tr class="emph">
+        <th scope="row">Total</th>
+        <td class="num"></td>
+        <td class="num dim">{{ saxo_total_start | money }}</td>
+        <td class="num">{{ saxo_total_end | money }}</td>
+      </tr>
     </tbody>
   </table>
+  <p class="note">Each category compounds at its own expected_real_return_pct from
+    <code>config/assets.toml</code> under <code>[[saxo_projection_category]]</code>, then
+    the totals are summed — no shared assumption across the whole Saxo portfolio.</p>
 </section>
+{% endif %}
 {% endblock %}

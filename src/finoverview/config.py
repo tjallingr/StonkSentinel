@@ -125,6 +125,10 @@ class AssetsConfig:
         savings as encumbered without editing code."""
         return self.raw.get("account_override", {})
 
+    @property
+    def saxo_projection_categories(self) -> list[dict[str, Any]]:
+        return self.raw.get("saxo_projection_category", [])
+
 
 def load_settings(config_dir: Path | None = None) -> Settings:
     d = config_dir or DEFAULT_CONFIG_DIR

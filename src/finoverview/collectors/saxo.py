@@ -269,7 +269,11 @@ class SaxoCollector(Collector):
             base = pos.get("NetPositionBase", {})
             view = pos.get("NetPositionView", {})
             fmt = pos.get("DisplayAndFormat", {})
-            exch = pos.get("ExchangeInfo", {})
+            # The API's own FieldGroups name is "ExchangeInfo" but the key it actually
+            # returns in the payload is "Exchange". CountryCode doesn't exist in this
+            # group at all, so `country` stays None until a /ref/v1/instruments lookup
+            # is added.
+            exch = pos.get("Exchange", {})
 
             account_key = base.get("AccountKey")
             account_id = account_ids.get(account_key)
@@ -297,7 +301,7 @@ class SaxoCollector(Collector):
                 quantity=float(base.get("Amount") or 0),
                 avg_open_price=_f(base.get("OpenPrice")),
                 last_price=_f(view.get("CurrentPrice")),
-                market_value_minor=db.to_minor(view.get("MarketValue") or 0),
+                market_value_minor=db.to_minor(_market_value(view)),
                 currency=currency,
                 unrealized_pl_minor=db.to_minor(view.get("ProfitLossOnTrade") or 0),
                 exchange=exch.get("ExchangeId"),
@@ -312,3 +316,14 @@ def _f(v: Any) -> float | None:
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _market_value(view: dict) -> float:
+    """Without a market-data subscription for an instrument's exchange, Saxo omits
+    MarketValue entirely rather than sending 0. Reconstruct it from cost basis plus
+    unrealised P/L, which holds regardless of live pricing: MarketValueOpen is the
+    signed cost basis (negative for a buy), so its magnitude plus the P/L is the
+    current value."""
+    if "MarketValue" in view:
+        return view["MarketValue"] or 0
+    return abs(view.get("MarketValueOpen") or 0) + (view.get("ProfitLossOnTrade") or 0)

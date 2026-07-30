@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<section>
+  <h2>Saxo asset projection categories</h2>
+  <p class="note">Each row compounds at its own rate in the Saxo asset projection.
+    Symbols are comma-separated tickers (e.g. <code>IWDA, VWCE</code>), matched
+    against the exchange-stripped Symbol Saxo reports for each position. Leave the
+    key blank on the last row to skip adding it.</p>
+  <form method="post" action="/settings/saxo-projection">
+    <table class="data form">
+      <thead>
+        <tr><th>Key</th><th>Label</th><th class="num">Rate %</th><th>Symbols</th></tr>
+      </thead>
+      <tbody>
+        {% for c in categories %}
+        <tr>
+          <td><input name="key" value="{{ c.key }}"></td>
+          <td><input name="label" value="{{ c.label }}"></td>
+          <td><input name="rate" type="number" step="0.1" value="{{ c.expected_real_return_pct }}"></td>
+          <td><input name="symbols" value="{{ c.symbols | join(', ') }}"></td>
+        </tr>
+        {% endfor %}
+        <tr>
+          <td><input name="key" value="" placeholder="new_key"></td>
+          <td><input name="label" value=""></td>
+          <td><input name="rate" type="number" step="0.1" value=""></td>
+          <td><input name="symbols" value=""></td>
+        </tr>
+      </tbody>
+    </table>
+    <p><button class="primary" type="submit">Save</button></p>
+  </form>
+</section>
+{% endblock %}

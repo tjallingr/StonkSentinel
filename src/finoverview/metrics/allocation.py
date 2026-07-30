@@ -6,6 +6,12 @@ import sqlite3
 
 from ..collectors.fx import convert_minor
 from ..db import from_minor
+from . import networth
+
+CLASS_ORDER = ["Equity", "Bonds", "Cash", "Savings", "Other"]
+
+_ASSET_CLASS_TO_CLASS = {"equity": "Equity", "etf": "Equity", "fund": "Equity", "bond": "Bonds"}
+_ACCOUNT_KIND_TO_CLASS = {"savings": "Savings", "checking": "Cash"}
 
 
 def _latest_positions(conn: sqlite3.Connection, base: str) -> list[dict]:
@@ -66,6 +72,54 @@ def breakdown(conn: sqlite3.Connection, base: str = "EUR") -> dict:
         "by_account": _group(rows, "account"),
         "position_count": len(rows),
     }
+
+
+def net_worth_by_class(conn: sqlite3.Connection, base: str = "EUR") -> list[dict]:
+    """Every account and position counting toward net worth, bucketed into a
+    small fixed taxonomy (Equity, Bonds, Cash, Savings, Other) instead of the
+    raw provider asset_class or account kind. Brokerage accounts are split into
+    their own cash balance plus their positions' asset classes, rather than
+    counted as one lump so their internal composition isn't lost."""
+    buckets: dict[str, int] = {c: 0 for c in CLASS_ORDER}
+
+    brokerage_ids = {
+        r["id"] for r in conn.execute(
+            "SELECT id FROM accounts WHERE include_in_networth = 1 AND kind = 'brokerage'"
+        ).fetchall()
+    }
+
+    for b in networth.current_balances(conn, base):
+        if b.account_id in brokerage_ids:
+            continue
+        label = _ACCOUNT_KIND_TO_CLASS.get(b.kind, "Other")
+        buckets[label] += b.amount_base_minor
+
+    for account_id in brokerage_ids:
+        row = conn.execute(
+            "SELECT balance_minor, currency, ts FROM balance_snapshots "
+            "WHERE account_id = ? AND balance_type = 'CashBalance' "
+            "ORDER BY ts DESC LIMIT 1",
+            (account_id,),
+        ).fetchone()
+        if row:
+            buckets["Cash"] += convert_minor(conn, row["balance_minor"], row["currency"], base, row["ts"])
+
+    if brokerage_ids:
+        placeholders = ",".join("?" * len(brokerage_ids))
+        positions = conn.execute(
+            f"SELECT asset_class, market_value_minor, currency, ts FROM latest_positions "
+            f"WHERE account_id IN ({placeholders})",
+            tuple(brokerage_ids),
+        ).fetchall()
+        for p in positions:
+            value = convert_minor(conn, p["market_value_minor"], p["currency"], base, p["ts"])
+            buckets[_ASSET_CLASS_TO_CLASS.get(p["asset_class"] or "", "Other")] += value
+
+    total = sum(buckets.values()) or 1
+    return [
+        {"label": label, "value": from_minor(buckets[label]), "pct": buckets[label] / total * 100}
+        for label in CLASS_ORDER if buckets[label]
+    ]
 
 
 def concentration(conn: sqlite3.Connection, base: str = "EUR", top: int = 5) -> dict:

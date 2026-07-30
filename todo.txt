@@ -1,0 +1,5 @@
+- use an actual repo and ORM instead of sql as string
+- use tailwind and no css style blocks in html page
+- connect enable Banking
+- run on Pi
+- create mobile version
