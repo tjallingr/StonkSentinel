@@ -31,6 +31,7 @@ BALANCE_TYPE_PRIORITY = {
 @dataclass
 class AccountBalance:
     account_id: int
+    external_id: str
     label: str
     institution: str | None
     provider: str
@@ -56,7 +57,7 @@ def current_balances(conn: sqlite3.Connection, base: str = "EUR") -> list[Accoun
     rows = conn.execute(
         """
         SELECT b.account_id, b.balance_minor, b.currency, b.balance_type, b.ts,
-               a.label, a.institution, a.provider, a.kind, a.liquid, a.encumbered
+               a.external_id, a.label, a.institution, a.provider, a.kind, a.liquid, a.encumbered
         FROM balance_snapshots b
         JOIN accounts a ON a.id = b.account_id
         JOIN (SELECT account_id, MAX(ts) AS ts FROM balance_snapshots GROUP BY account_id) m
@@ -74,6 +75,7 @@ def current_balances(conn: sqlite3.Connection, base: str = "EUR") -> list[Accoun
         r = _best_balance_type(candidates)
         out.append(AccountBalance(
             account_id=account_id,
+            external_id=r["external_id"],
             label=r["label"],
             institution=r["institution"],
             provider=r["provider"],

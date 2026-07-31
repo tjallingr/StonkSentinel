@@ -22,8 +22,8 @@ from fastapi.templating import Jinja2Templates
 from .. import db
 from ..collectors import get_collector
 from ..config import load_assets, load_settings
-from ..metrics import allocation, health, networth, projection, returns, saxo_projection
-from ..metrics.saxo_projection.categories import load_categories
+from ..metrics import allocation, health, networth, projection, returns
+from ..metrics import assets as asset_metrics
 from .charts import area_chart, bar_rows, band_chart, pie_chart
 from .settings_store import (
     parse_assets_form,
@@ -76,6 +76,7 @@ def dashboard(request: Request, window: int = Query(365, ge=7, le=3650)):
     conn = get_conn()
     try:
         base = settings.base_currency
+        assets_cfg = load_assets(settings.config_dir)
         summary = networth.summary(conn, base)
         series = networth.history(conn, base, days=max(window, 90))
         collector_rows = health.collectors(conn, settings.stale_after_hours)
@@ -83,7 +84,9 @@ def dashboard(request: Request, window: int = Query(365, ge=7, le=3650)):
 
         ret = returns.compute(conn, base, days=window)
         breakdown = allocation.breakdown(conn, base)
-        class_rows = allocation.net_worth_by_class(conn, base)
+        class_rows = asset_metrics.allocation.by_category(
+            asset_metrics.gather(conn, base, assets_cfg)
+        )
         conc = allocation.concentration(conn, base)
         rec = allocation.recurring_summary(conn, base)
         dd = returns.max_drawdown(series)
@@ -104,8 +107,7 @@ def dashboard(request: Request, window: int = Query(365, ge=7, le=3650)):
                 "changes": changes,
                 "returns": ret,
                 "breakdown": breakdown,
-                "bars": {k: bar_rows(v) for k, v in breakdown.items()
-                         if k.startswith("by_") and k != "by_asset_class"},
+                "bars": {k: bar_rows(v) for k, v in breakdown.items() if k.startswith("by_")},
                 "class_rows": class_rows,
                 "class_pie": pie_chart(class_rows),
                 "concentration": conc,
@@ -146,41 +148,43 @@ def projection_page(request: Request):
     conn = get_conn()
     try:
         base = settings.base_currency
-        assets = load_assets(settings.config_dir)
-        out = projection.run(conn, base, assets.projection)
+        assets_cfg = load_assets(settings.config_dir)
+        out = projection.run(conn, base, assets_cfg)
         bands = out["monte_carlo"]["bands"]
         det = out["deterministic"]
         collector_rows = health.collectors(conn, settings.stale_after_hours)
         consent_rows = health.consents(conn)
 
-        sp = saxo_projection.run(conn, base, assets, out["assumptions"].years)
-        sp_total_start = sp["total"][0] or 1
-        sp_bars = bar_rows([
-            {"label": c.label, "value": sp["start_values"][c.key],
-             "pct": sp["start_values"][c.key] / sp_total_start * 100}
-            for c in sp["categories"] if sp["start_values"][c.key]
+        total = asset_metrics.combine(out["deterministic_by_asset"])
+        total_start = total[0] or 1
+        asset_bars = bar_rows([
+            {"label": a.label, "value": a.value_base, "pct": a.value_base / total_start * 100}
+            for a in out["assets"] if a.value_base
         ])
-        sp_rows = [
-            {"label": c.label, "rate": c.expected_real_return_pct,
-             "start": sp["start_values"][c.key], "end": sp["series"][c.key][-1]}
-            for c in sp["categories"] if sp["start_values"][c.key]
+        asset_rows = [
+            {"label": a.label, "category": a.category, "rate": a.yield_pct,
+             "contribution": a.monthly_contribution,
+             "start": a.value_base, "end": out["deterministic_by_asset"][a.key][-1]}
+            for a in out["assets"]
         ]
 
         return templates.TemplateResponse(
             request, "projection.html",
             {"base": base,
              "assumptions": out["assumptions"].as_display(),
+             "weighted_yield_pct": out["weighted_yield_pct"],
+             "total_monthly_contribution": out["total_monthly_contribution"],
              "bands": bands,
              "terminal": out["monte_carlo"]["terminal"],
              "monthly_contribution": out["monte_carlo"]["monthly_contribution"],
              "start": out["monte_carlo"]["start"],
              "chart": band_chart(bands, det, width=1040, height=260),
              "note": out["monte_carlo"]["note"],
-             "saxo_bars": sp_bars,
-             "saxo_rows": sp_rows,
-             "saxo_years": out["assumptions"].years,
-             "saxo_total_start": sp["total"][0],
-             "saxo_total_end": sp["total"][-1],
+             "asset_bars": asset_bars,
+             "asset_rows": asset_rows,
+             "asset_years": out["assumptions"].years,
+             "asset_total_start": total[0],
+             "asset_total_end": total[-1],
              "collectors": collector_rows,
              "consents": consent_rows,
              "overall": health.overall(collector_rows, consent_rows)},
@@ -193,15 +197,15 @@ def projection_page(request: Request):
 def settings_page(request: Request, error: str | None = None):
     conn = get_conn()
     try:
-        assets = load_assets(settings.config_dir)
-        fallback_pct = float(assets.projection.get("expected_real_return_pct", 5.0))
-        categories = load_categories(assets.saxo_projection_categories, fallback_pct)
+        assets_cfg = load_assets(settings.config_dir)
+        fallback_pct = float(assets_cfg.projection.get("expected_real_return_pct", 5.0))
+        categories = asset_metrics.load_categories(assets_cfg.saxo_projection_categories, fallback_pct)
         collector_rows = health.collectors(conn, settings.stale_after_hours)
         consent_rows = health.consents(conn)
         return templates.TemplateResponse(
             request, "settings.html",
             {"categories": categories,
-             "manual_assets": assets.assets,
+             "manual_assets": assets_cfg.assets,
              "error": error,
              "collectors": collector_rows,
              "consents": consent_rows,

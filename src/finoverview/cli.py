@@ -18,7 +18,8 @@ from pathlib import Path
 from . import db
 from .collectors import ALL, get_collector
 from .config import load_assets, load_settings
-from .metrics import allocation, health, networth, projection, returns, saxo_projection
+from .metrics import allocation, health, networth, projection, returns
+from .metrics import assets as asset_metrics
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -37,14 +38,14 @@ def cmd_init(args, settings, conn) -> int:
 
 def cmd_collect(args, settings, conn) -> int:
     db.init_db(conn)
-    assets = load_assets(settings.config_dir)
+    assets_cfg = load_assets(settings.config_dir)
     names = [args.only] if args.only else list(ALL)
 
     failures = []
     for name in names:
         cls = get_collector(name)
         try:
-            rows = cls(conn, settings, assets).run()
+            rows = cls(conn, settings, assets_cfg).run()
             print(f"{name:<16} ok      {rows} rows")
         except Exception as exc:  # noqa: BLE001
             print(f"{name:<16} FAILED  {type(exc).__name__}: {exc}", file=sys.stderr)
@@ -80,6 +81,7 @@ def cmd_status(args, settings, conn) -> int:
 def cmd_summary(args, settings, conn) -> int:
     db.init_db(conn)
     base = settings.base_currency
+    assets_cfg = load_assets(settings.config_dir)
     s = networth.summary(conn, base)
 
     print(f"NET WORTH  {s['net_worth']:>14,.2f} {base}")
@@ -103,10 +105,12 @@ def cmd_summary(args, settings, conn) -> int:
         print(f"  ! {w}")
 
     br = allocation.breakdown(conn, base)
-    if br["position_count"]:
-        print(f"\nALLOCATION ({br['position_count']} positions)")
-        for b in br["by_asset_class"]:
+    rows = asset_metrics.allocation.by_category(asset_metrics.gather(conn, base, assets_cfg))
+    if rows:
+        print("\nALLOCATION")
+        for b in rows:
             print(f"  {b['label']:<14} {b['pct']:>6.1f}%  {b['value']:>12,.2f}")
+    if br["position_count"]:
         conc = allocation.concentration(conn, base)
         print(f"  top-5 share  {conc['top_n_pct']:.1f}%   "
               f"effective holdings {conc['effective_holdings']:.1f}")
@@ -126,13 +130,14 @@ def cmd_summary(args, settings, conn) -> int:
 
 def cmd_project(args, settings, conn) -> int:
     db.init_db(conn)
-    assets = load_assets(settings.config_dir)
-    out = projection.run(conn, settings.base_currency, assets.projection)
+    assets_cfg = load_assets(settings.config_dir)
+    out = projection.run(conn, settings.base_currency, assets_cfg)
     a = out["assumptions"]
 
     print("ASSUMPTIONS")
     for label, value in a.as_display():
         print(f"  {label:<22} {value}")
+    print(f"  {'Weighted yield':<22} {out['weighted_yield_pct']:.1f}% / yr")
 
     print(f"\nPROJECTION ({settings.base_currency}, real terms)")
     print(f"  {'year':>5} {'p10':>14} {'p50':>14} {'p90':>14} {'deterministic':>14}")
@@ -143,14 +148,14 @@ def cmd_project(args, settings, conn) -> int:
         print(f"  {band['year']:>5} {band['p10']:>14,.0f} {band['p50']:>14,.0f} "
               f"{band['p90']:>14,.0f} {det.get(band['year'], 0):>14,.0f}")
 
-    sp = saxo_projection.run(conn, settings.base_currency, assets, a.years)
-    print(f"\nSAXO ASSET PROJECTION ({settings.base_currency}, real terms)")
-    for category in sp["categories"]:
-        start = sp["start_values"][category.key]
-        end = sp["series"][category.key][-1]
-        print(f"  {category.label:<24} {start:>14,.0f} -> {end:>14,.0f}  "
-              f"({category.expected_real_return_pct:.1f}%/yr)")
-    print(f"  {'Total':<24} {sp['total'][0]:>14,.0f} -> {sp['total'][-1]:>14,.0f}")
+    print(f"\nASSET PROJECTION ({settings.base_currency}, real terms)")
+    for asset in out["assets"]:
+        series = out["deterministic_by_asset"][asset.key]
+        print(f"  {asset.label:<24} {series[0]:>14,.0f} -> {series[-1]:>14,.0f}  "
+              f"({asset.yield_pct:.1f}%/yr, {asset.category}"
+              f"{f', +{asset.monthly_contribution:,.0f}/mo' if asset.monthly_contribution else ''})")
+    total = asset_metrics.combine(out["deterministic_by_asset"])
+    print(f"  {'Total':<24} {total[0]:>14,.0f} -> {total[-1]:>14,.0f}")
     return 0
 
 

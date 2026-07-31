@@ -1,4 +1,4 @@
-.PHONY: install init collect run lint
+.PHONY: install init collect run lint get-saxo-token
 
 install:
 	python3 -m venv .venv
@@ -17,4 +17,6 @@ lint:
 	ruff check src
 
 get-saxo-token:
+	PYTHONPATH=src .venv/bin/python -m finoverview.auth.saxo_link
+	PYTHONPATH=src .venv/bin/python -m finoverview.cli collect --only saxo
 

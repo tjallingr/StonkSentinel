@@ -10,6 +10,11 @@
 # Manually valued assets. Anything no API can tell you.
 # --------------------------------------------------------------------------
 
+# category and monthly_contribution feed the asset projection (see
+# [[saxo_projection_category]] below): category overrides the kind -> bucket
+# default (vehicle/property/other -> Other, savings -> Savings); leave it out
+# to use that default. monthly_contribution defaults to 0.
+
 [[asset]]
 key         = "car"
 label       = "Car"
@@ -44,12 +49,19 @@ liquid      = false
 #
 # This is where you mark the KBC collateral savings. It counts toward net worth
 # but not toward "available", so the dashboard stops implying you can spend it.
+#
+# category / yield_pct / monthly_contribution are for the asset projection only
+# (see [[saxo_projection_category]] below) — unlike label/kind/liquid/encumbered
+# above, they're read fresh at projection time, never written to the database.
+# Omit them to fall back to a kind -> category default with 0 yield/contribution.
 # --------------------------------------------------------------------------
 
 [account_override."enablebanking:REPLACE_WITH_KBC_SAVINGS_UID"]
 label      = "KBC savings (collateral)"
 kind       = "savings"
 encumbered = true
+# yield_pct = 1.5
+# monthly_contribution = 100.00
 
 [account_override."enablebanking:REPLACE_WITH_RABO_SAVINGS_UID"]
 label = "Rabobank savings"
@@ -136,9 +148,14 @@ kind     = "deposit"
 # engine with arithmetic attached. The dashboard prints them next to the chart
 # so the output can't be mistaken for a forecast.
 #
-# expected_real_return_pct is REAL (after inflation), so the projected figures
-# are in today's purchasing power. 5% real for a diversified equity portfolio is
-# a common assumption, not a promise.
+# Every asset counting toward net worth compounds at its OWN yield and
+# contribution (see [[saxo_projection_category]] below and the per-asset
+# fields above) — expected_real_return_pct here is just the fallback used for
+# anything left uncategorised (the auto-injected "other" position category,
+# and the synthetic "unallocated savings" line covering any monthly_contribution
+# below or derived from recurring income that isn't assigned to a specific
+# asset). It's REAL (after inflation): 5% real for a diversified equity
+# portfolio is a common assumption, not a promise.
 # --------------------------------------------------------------------------
 
 [projection]
@@ -153,15 +170,24 @@ seed                     = 42        # remove for a different draw each run
 # Omit monthly_contribution to derive it from your recurring income minus costs.
 # monthly_contribution = 800.00
 
+# Category the unallocated-savings line above falls into. Defaults to "Cash".
+# unallocated_category = "Cash"
+
 
 # --------------------------------------------------------------------------
-# Saxo asset projection.
+# Saxo asset projection categories.
 #
 # Buckets current Saxo holdings by ticker symbol into named categories, each
-# compounded at its own expected_real_return_pct, then summed. Distinct from
-# [projection] above: that one is the blended total, this one is the
-# composition. Symbols, not ISINs: Saxo's netpositions payload doesn't return
-# ISIN for these instruments, only Symbol (e.g. "IWDA:xams" -> match "IWDA").
+# compounded at its own expected_real_return_pct (+ optional monthly_contribution),
+# feeding directly into the one unified asset projection above — not a separate
+# model. Symbols, not ISINs: Saxo's netpositions payload doesn't return ISIN for
+# these instruments, only Symbol (e.g. "IWDA:xams" -> match "IWDA").
+#
+# bucket is the coarse group (Equity/Bonds/Cash/Savings/Other) shown on the
+# overview donut. Leave it out and it defaults from the matched positions' own
+# Saxo asset type (equity/etf/fund -> Equity, bond -> Bonds, else Other) — set
+# it explicitly for anything that default gets wrong, e.g. a gold ETC isn't
+# really "Equity" just because Saxo files it as one.
 #
 # Any Saxo position whose symbol isn't listed below falls into "other", which
 # defaults to [projection].expected_real_return_pct unless defined here too.

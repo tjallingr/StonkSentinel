@@ -9,13 +9,18 @@ def serialize_categories(categories: list[dict]) -> str:
     blocks = []
     for c in categories:
         symbols = ", ".join(json.dumps(s) for s in c["symbols"])
-        blocks.append(
-            f"{MARKER}\n"
-            f'key                      = {json.dumps(c["key"])}\n'
-            f'label                    = {json.dumps(c["label"])}\n'
-            f'expected_real_return_pct = {c["expected_real_return_pct"]}\n'
-            f"symbols                  = [{symbols}]\n"
-        )
+        lines = [
+            MARKER,
+            f'key                      = {json.dumps(c["key"])}',
+            f'label                    = {json.dumps(c["label"])}',
+            f'expected_real_return_pct = {c["expected_real_return_pct"]}',
+        ]
+        if c.get("bucket"):
+            lines.append(f'bucket                   = {json.dumps(c["bucket"])}')
+        if c.get("monthly_contribution"):
+            lines.append(f'monthly_contribution     = {c["monthly_contribution"]}')
+        lines.append(f"symbols                  = [{symbols}]")
+        blocks.append("\n".join(lines) + "\n")
     return "\n".join(blocks) + "\n"
 
 
@@ -30,18 +35,27 @@ def parse_categories_form(form) -> list[dict]:
     keys = form.getlist("key")
     labels = form.getlist("label")
     rates = form.getlist("rate")
+    buckets = form.getlist("bucket")
+    contributions = form.getlist("contribution")
     symbols = form.getlist("symbols")
     categories = []
-    for key, label, rate, syms in zip(keys, labels, rates, symbols):
+    for key, label, rate, bucket, contribution, syms in zip(
+        keys, labels, rates, buckets, contributions, symbols
+    ):
         key = key.strip()
         if not key:
             continue
-        categories.append({
+        category = {
             "key": key,
             "label": label.strip() or key,
             "expected_real_return_pct": float(rate),
             "symbols": [s.strip() for s in syms.split(",") if s.strip()],
-        })
+        }
+        if bucket.strip():
+            category["bucket"] = bucket.strip()
+        if contribution.strip():
+            category["monthly_contribution"] = float(contribution)
+        categories.append(category)
     return categories
 
 
@@ -61,6 +75,10 @@ def serialize_assets(assets: list[dict]) -> str:
             lines.append(f'as_of    = {json.dumps(a["as_of"])}')
         if a.get("expected_real_return_pct") is not None:
             lines.append(f'expected_real_return_pct = {a["expected_real_return_pct"]}')
+        if a.get("category"):
+            lines.append(f'category = {json.dumps(a["category"])}')
+        if a.get("monthly_contribution"):
+            lines.append(f'monthly_contribution = {a["monthly_contribution"]}')
         blocks.append("\n".join(lines) + "\n")
     return "\n".join(blocks) + "\n"
 
@@ -94,10 +112,12 @@ def parse_assets_form(form) -> list[dict]:
     liquids = form.getlist("liquid")
     as_ofs = form.getlist("as_of")
     yields_ = form.getlist("yield")
+    categories = form.getlist("category")
+    contributions = form.getlist("contribution")
 
     assets = []
-    for key, label, kind, value, currency, liquid, as_of, yld in zip(
-        keys, labels, kinds, values, currencies, liquids, as_ofs, yields_
+    for key, label, kind, value, currency, liquid, as_of, yld, category, contribution in zip(
+        keys, labels, kinds, values, currencies, liquids, as_ofs, yields_, categories, contributions
     ):
         key = key.strip()
         if not key:
@@ -114,5 +134,9 @@ def parse_assets_form(form) -> list[dict]:
             asset["as_of"] = as_of.strip()
         if yld.strip():
             asset["expected_real_return_pct"] = float(yld)
+        if category.strip():
+            asset["category"] = category.strip()
+        if contribution.strip():
+            asset["monthly_contribution"] = float(contribution)
         assets.append(asset)
     return assets

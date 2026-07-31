@@ -7,11 +7,13 @@ is decoration. The dashboard renders the assumptions next to the chart for the
 same reason.
 
 Two models:
-  deterministic  - constant real return, no volatility. Easy to reason about,
-                   and wrong in a specific known way: it never shows sequence risk.
-  monte_carlo    - lognormal annual returns, N paths, percentile bands. Shows the
-                   spread. Still assumes iid returns, which understates the odds
-                   of prolonged drawdowns in real markets.
+  deterministic  - each asset compounds at its own yield_pct and contribution
+                   (metrics.assets), summed. No volatility, so it never shows
+                   sequence risk.
+  monte_carlo    - lognormal annual returns around the value-weighted average
+                   yield across all assets, N paths, percentile bands. Shows the
+                   spread, still assumes iid returns and one blended volatility
+                   across every asset (no per-category volatility modelling).
 """
 
 from __future__ import annotations
@@ -21,13 +23,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from . import allocation, networth
+from . import assets as asset_metrics
+from ..config import AssetsConfig
 
 
 @dataclass
 class Assumptions:
     years: int
-    expected_real_return_pct: float
+    fallback_expected_real_return_pct: float
     volatility_pct: float
     inflation_pct: float
     monthly_contribution: float | None
@@ -39,7 +42,7 @@ class Assumptions:
     def from_config(cls, cfg: dict) -> "Assumptions":
         return cls(
             years=int(cfg.get("years", 20)),
-            expected_real_return_pct=float(cfg.get("expected_real_return_pct", 5.0)),
+            fallback_expected_real_return_pct=float(cfg.get("expected_real_return_pct", 5.0)),
             volatility_pct=float(cfg.get("volatility_pct", 15.0)),
             inflation_pct=float(cfg.get("inflation_pct", 2.0)),
             monthly_contribution=(
@@ -53,7 +56,7 @@ class Assumptions:
     def as_display(self) -> list[tuple[str, str]]:
         return [
             ("Horizon", f"{self.years} years"),
-            ("Expected real return", f"{self.expected_real_return_pct:.1f}% / yr"),
+            ("Fallback / unallocated return", f"{self.fallback_expected_real_return_pct:.1f}% / yr"),
             ("Volatility", f"{self.volatility_pct:.1f}%"),
             ("Inflation", f"{self.inflation_pct:.1f}%"),
             ("Monthly contribution",
@@ -64,51 +67,14 @@ class Assumptions:
         ]
 
 
-def _starting_capital(conn: sqlite3.Connection, base: str) -> float:
-    """Invested capital plus freely available cash. Encumbered balances are
-    excluded: they're real net worth but not available to compound."""
-    s = networth.summary(conn, base)
-    return s["available"]
-
-
-def _monthly_contribution(conn: sqlite3.Connection, base: str,
-                          assumptions: Assumptions) -> float:
-    if assumptions.monthly_contribution is not None:
-        return assumptions.monthly_contribution
-    rec = allocation.recurring_summary(conn, base)
-    return max(0.0, rec["monthly_net"])
-
-
-def deterministic(conn: sqlite3.Connection, base: str, assumptions: Assumptions) -> list[dict]:
-    capital = _starting_capital(conn, base)
-    contribution = _monthly_contribution(conn, base, assumptions)
-    monthly_return = (1 + assumptions.expected_real_return_pct / 100) ** (1 / 12) - 1
-
-    out = [{"year": 0, "value": capital, "contributed": 0.0}]
-    value = capital
-    contributed = 0.0
-    for year in range(1, assumptions.years + 1):
-        annual_contrib = contribution * 12 * (
-            (1 + assumptions.contribution_growth_pct / 100) ** (year - 1)
-        )
-        monthly = annual_contrib / 12
-        for _ in range(12):
-            value = value * (1 + monthly_return) + monthly
-            contributed += monthly
-        out.append({"year": year, "value": value, "contributed": contributed})
-    return out
-
-
-def monte_carlo(conn: sqlite3.Connection, base: str, assumptions: Assumptions) -> dict:
+def monte_carlo(capital: float, monthly_contribution: float,
+                expected_real_return_pct: float, assumptions: Assumptions) -> dict:
     """Lognormal annual returns. 10k paths x 30 years runs in well under a second
     on a Pi 4, so there's no reason to cheap out on path count."""
-    capital = _starting_capital(conn, base)
-    contribution = _monthly_contribution(conn, base, assumptions)
-
     rng = np.random.default_rng(assumptions.seed)
     n, years = assumptions.paths, assumptions.years
 
-    mu = assumptions.expected_real_return_pct / 100
+    mu = expected_real_return_pct / 100
     sigma = assumptions.volatility_pct / 100
     # Convert arithmetic mean + vol into lognormal parameters so the *mean*
     # outcome matches the stated expected return rather than the median.
@@ -122,7 +88,7 @@ def monte_carlo(conn: sqlite3.Connection, base: str, assumptions: Assumptions) -
     }]
 
     for year in range(1, years + 1):
-        annual_contrib = contribution * 12 * (
+        annual_contrib = monthly_contribution * 12 * (
             (1 + assumptions.contribution_growth_pct / 100) ** (year - 1)
         )
         growth = np.exp(rng.normal(mu_log, sigma_log, n))
@@ -138,7 +104,7 @@ def monte_carlo(conn: sqlite3.Connection, base: str, assumptions: Assumptions) -
     return {
         "bands": bands,
         "start": capital,
-        "monthly_contribution": contribution,
+        "monthly_contribution": monthly_contribution,
         "terminal": {
             "p10": bands[-1]["p10"], "p50": bands[-1]["p50"], "p90": bands[-1]["p90"],
             "mean": bands[-1]["mean"],
@@ -148,18 +114,24 @@ def monte_carlo(conn: sqlite3.Connection, base: str, assumptions: Assumptions) -
     }
 
 
-def run(conn: sqlite3.Connection, base: str, cfg: dict) -> dict:
-    assumptions = Assumptions.from_config(cfg)
+def run(conn: sqlite3.Connection, base: str, assets_cfg: AssetsConfig) -> dict:
+    assumptions = Assumptions.from_config(assets_cfg.projection)
+    gathered = asset_metrics.gather(conn, base, assets_cfg)
+
+    det_by_asset = asset_metrics.deterministic_by_asset(
+        gathered, assumptions.years, assumptions.contribution_growth_pct
+    )
+    det_total = asset_metrics.combine(det_by_asset)
+    capital = sum(a.value_base for a in gathered)
+    avg_yield = asset_metrics.weighted_average_yield_pct(gathered)
+    contribution = asset_metrics.total_monthly_contribution(gathered)
+
     return {
         "assumptions": assumptions,
-        "deterministic": deterministic(conn, base, assumptions),
-        "monte_carlo": monte_carlo(conn, base, assumptions),
+        "assets": gathered,
+        "deterministic_by_asset": det_by_asset,
+        "deterministic": [{"year": i, "value": v} for i, v in enumerate(det_total)],
+        "monte_carlo": monte_carlo(capital, contribution, avg_yield, assumptions),
+        "weighted_yield_pct": avg_yield,
+        "total_monthly_contribution": contribution,
     }
-
-
-def target_year(bands: list[dict], target: float, percentile: str = "p50") -> int | None:
-    """First projection year where the given percentile path reaches a target."""
-    for band in bands:
-        if band[percentile] >= target:
-            return band["year"]
-    return None

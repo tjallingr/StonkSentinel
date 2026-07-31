@@ -29,6 +29,10 @@
       {% for label, value in assumptions %}
       <tr><th scope="row">{{ label }}</th><td class="num">{{ value }}</td></tr>
       {% endfor %}
+      <tr><th scope="row">Weighted yield <small>value-weighted across every asset below</small></th>
+        <td class="num">{{ "%.1f"|format(weighted_yield_pct) }}% / yr</td></tr>
+      <tr><th scope="row">Total monthly contribution</th>
+        <td class="num">{{ total_monthly_contribution | money }}</td></tr>
     </tbody>
   </table>
   <p class="note">{{ note }} Edit these in <code>config/assets.toml</code> under
@@ -37,11 +41,11 @@
     lower band as optimistic rather than a floor.</p>
 </section>
 
-{% if saxo_rows %}
+{% if asset_rows %}
 <section>
-  <h2>Saxo asset projection</h2>
+  <h2>Asset projection</h2>
   <ul class="bars">
-    {% for b in saxo_bars %}
+    {% for b in asset_bars %}
     <li>
       <span class="bar-label">{{ b.label }}</span>
       <span class="bar-track"><span class="bar-fill" style="width:{{ "%.1f"|format(b.width) }}%"></span></span>
@@ -50,28 +54,34 @@
     {% endfor %}
   </ul>
   <table class="data">
-    <thead><tr><th>Category</th><th class="num">Rate</th>
-      <th class="num">Today</th><th class="num">In {{ saxo_years }} years</th></tr></thead>
+    <thead><tr><th>Asset</th><th>Category</th><th class="num">Rate</th>
+      <th class="num">Monthly</th>
+      <th class="num">Today</th><th class="num">In {{ asset_years }} years</th></tr></thead>
     <tbody>
-      {% for r in saxo_rows %}
+      {% for r in asset_rows %}
       <tr>
         <th scope="row">{{ r.label }}</th>
+        <td class="dim">{{ r.category }}</td>
         <td class="num dim">{{ "%.1f"|format(r.rate) }}%</td>
+        <td class="num dim">{{ r.contribution | money if r.contribution else "—" }}</td>
         <td class="num dim">{{ r.start | money }}</td>
         <td class="num">{{ r.end | money }}</td>
       </tr>
       {% endfor %}
       <tr class="emph">
         <th scope="row">Total</th>
+        <td></td>
         <td class="num"></td>
-        <td class="num dim">{{ saxo_total_start | money }}</td>
-        <td class="num">{{ saxo_total_end | money }}</td>
+        <td class="num"></td>
+        <td class="num dim">{{ asset_total_start | money }}</td>
+        <td class="num">{{ asset_total_end | money }}</td>
       </tr>
     </tbody>
   </table>
-  <p class="note">Each category compounds at its own expected_real_return_pct from
-    <code>config/assets.toml</code> under <code>[[saxo_projection_category]]</code>, then
-    the totals are summed — no shared assumption across the whole Saxo portfolio.</p>
+  <p class="note">Every account and position counting toward net worth, each compounding
+    at its own rate and contribution — Saxo positions via <code>[[saxo_projection_category]]</code>,
+    manual assets via their own <code>[[asset]]</code> entry, everything else via
+    <code>[account_override]</code> or a kind-based default. Summed for the total above.</p>
 </section>
 {% endif %}
 {% endblock %}
