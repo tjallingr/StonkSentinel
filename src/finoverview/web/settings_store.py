@@ -1,34 +1,29 @@
-import json
 from pathlib import Path
 
-MARKER = "[[saxo_projection_category]]"
-ASSET_MARKER = "[[asset]]"
+import tomlkit
 
 
-def serialize_categories(categories: list[dict]) -> str:
-    blocks = []
-    for c in categories:
-        symbols = ", ".join(json.dumps(s) for s in c["symbols"])
-        lines = [
-            MARKER,
-            f'key                      = {json.dumps(c["key"])}',
-            f'label                    = {json.dumps(c["label"])}',
-            f'expected_real_return_pct = {c["expected_real_return_pct"]}',
-        ]
-        if c.get("bucket"):
-            lines.append(f'bucket                   = {json.dumps(c["bucket"])}')
-        if c.get("monthly_contribution"):
-            lines.append(f'monthly_contribution     = {c["monthly_contribution"]}')
-        lines.append(f"symbols                  = [{symbols}]")
-        blocks.append("\n".join(lines) + "\n")
-    return "\n".join(blocks) + "\n"
+def _category_table(c: dict) -> tomlkit.items.Table:
+    t = tomlkit.table()
+    t["key"] = c["key"]
+    t["label"] = c["label"]
+    t["expected_real_return_pct"] = c["expected_real_return_pct"]
+    if c.get("bucket"):
+        t["bucket"] = c["bucket"]
+    if c.get("monthly_contribution"):
+        t["monthly_contribution"] = c["monthly_contribution"]
+    t["symbols"] = c["symbols"]
+    return t
 
 
 def save_categories(config_dir: Path, categories: list[dict]) -> None:
     path = config_dir / "assets.toml"
-    text = path.read_text()
-    head = text.split(MARKER)[0].rstrip("\n")
-    path.write_text(f"{head}\n\n\n{serialize_categories(categories)}")
+    doc = tomlkit.parse(path.read_text())
+    aot = tomlkit.aot()
+    for c in categories:
+        aot.append(_category_table(c))
+    doc["saxo_projection_category"] = aot
+    path.write_text(tomlkit.dumps(doc))
 
 
 def parse_categories_form(form) -> list[dict]:
@@ -59,48 +54,33 @@ def parse_categories_form(form) -> list[dict]:
     return categories
 
 
-def serialize_assets(assets: list[dict]) -> str:
-    blocks = []
-    for a in assets:
-        lines = [
-            ASSET_MARKER,
-            f'key      = {json.dumps(a["key"])}',
-            f'label    = {json.dumps(a["label"])}',
-            f'kind     = {json.dumps(a["kind"])}',
-            f'value    = {a["value"]}',
-            f'currency = {json.dumps(a["currency"])}',
-            f'liquid   = {"true" if a["liquid"] else "false"}',
-        ]
-        if a.get("as_of"):
-            lines.append(f'as_of    = {json.dumps(a["as_of"])}')
-        if a.get("expected_real_return_pct") is not None:
-            lines.append(f'expected_real_return_pct = {a["expected_real_return_pct"]}')
-        if a.get("category"):
-            lines.append(f'category = {json.dumps(a["category"])}')
-        if a.get("monthly_contribution"):
-            lines.append(f'monthly_contribution = {a["monthly_contribution"]}')
-        blocks.append("\n".join(lines) + "\n")
-    return "\n".join(blocks) + "\n"
+def _asset_table(a: dict) -> tomlkit.items.Table:
+    t = tomlkit.table()
+    t["key"] = a["key"]
+    t["label"] = a["label"]
+    t["kind"] = a["kind"]
+    t["value"] = a["value"]
+    t["currency"] = a["currency"]
+    t["liquid"] = a["liquid"]
+    if a.get("as_of"):
+        t["as_of"] = a["as_of"]
+    if a.get("expected_real_return_pct") is not None:
+        t["expected_real_return_pct"] = a["expected_real_return_pct"]
+    if a.get("category"):
+        t["category"] = a["category"]
+    if a.get("monthly_contribution"):
+        t["monthly_contribution"] = a["monthly_contribution"]
+    return t
 
 
 def save_assets(config_dir: Path, assets: list[dict]) -> None:
     path = config_dir / "assets.toml"
-    text = path.read_text()
-    lines = text.splitlines(keepends=True)
-
-    start = next((i for i, line in enumerate(lines) if line.strip() == ASSET_MARKER), len(lines))
-    end = len(lines)
-    for i in range(start, len(lines)):
-        if lines[i].strip().startswith("[") and lines[i].strip() != ASSET_MARKER:
-            end = i
-            break
-
-    before = "".join(lines[:start]).rstrip("\n")
-    after = "".join(lines[end:])
-    new_text = (before + "\n\n" if before else "") + serialize_assets(assets)
-    if after:
-        new_text = new_text.rstrip("\n") + "\n\n\n" + after
-    path.write_text(new_text)
+    doc = tomlkit.parse(path.read_text())
+    aot = tomlkit.aot()
+    for a in assets:
+        aot.append(_asset_table(a))
+    doc["asset"] = aot
+    path.write_text(tomlkit.dumps(doc))
 
 
 def parse_assets_form(form) -> list[dict]:
