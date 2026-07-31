@@ -1,6 +1,7 @@
 [Unit]
 Description=finance-overview encrypted backup
 After=network-online.target
+OnFailure=finoverview-alert@backup.service
 
 [Service]
 Type=oneshot

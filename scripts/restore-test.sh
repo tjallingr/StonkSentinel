@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Prove the backup works. Run this now, not after a failure.
 set -euo pipefail
+
+if [ -n "${BACKUP_MOUNT_PATH:-}" ] && ! mountpoint -q "$BACKUP_MOUNT_PATH"; then
+  echo "FAIL: $BACKUP_MOUNT_PATH not mounted — plug in the backup drive first"
+  exit 1
+fi
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 

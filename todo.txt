@@ -1,7 +1,6 @@
 - use an actual repo and ORM instead of sql as string
 - use tailwind and no css style blocks in html page
-- successfully connect manual assets (savings), make intereset and quantity modifyable
-- connect enable Banking
 - run on Pi
 - create mobile version
 - simplify readme and complete make file
+- install ntfy and wire it to app 

@@ -10,4 +10,4 @@ Description=finance-overview failure notification (%i)
 Type=oneshot
 User=finoverview
 EnvironmentFile=-/etc/finoverview/env
-ExecStart=/bin/sh -c 'echo "finoverview collector %i FAILED on $(hostname) at $(date -Is)" | systemd-cat -t finoverview -p err; [ -n "${NTFY_URL:-}" ] && curl -fsS -d "finoverview collector %i failed on $(hostname)" "$NTFY_URL"; true'
+ExecStart=/bin/sh -c 'echo "finoverview %i FAILED on $(hostname) at $(date -Is)" | systemd-cat -t finoverview -p err; [ -n "${NTFY_URL:-}" ] && curl -fsS -d "finoverview %i failed on $(hostname)" "$NTFY_URL"; true'
