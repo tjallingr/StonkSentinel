@@ -110,6 +110,9 @@ class EnableBankingClient:
         return self._request("DELETE", f"/sessions/{session_id}")
 
     # --- data -----------------------------------------------------------
+    def details(self, account_uid: str) -> dict:
+        return self._request("GET", f"/accounts/{account_uid}/details")
+
     def balances(self, account_uid: str) -> dict:
         return self._request("GET", f"/accounts/{account_uid}/balances")
 
@@ -180,12 +183,8 @@ class EnableBankingCollector(Collector):
 
         ts = db.utcnow()
         rows = 0
-        for acct in info.get("accounts", []):
-            uid = acct.get("uid") or acct.get("account_id", {}).get("iban")
-            if not uid:
-                log.warning("%s: account without uid, skipping", institution)
-                continue
-
+        for uid in info.get("accounts", []):
+            acct = client.details(uid)
             iban = (acct.get("account_id") or {}).get("iban") or ""
             name = acct.get("name") or acct.get("product") or "Account"
             label = f"{name} {iban[-4:]}" if iban else name
@@ -233,6 +232,8 @@ class EnableBankingCollector(Collector):
 
 
 def _guess_kind(acct: dict) -> str:
+    if (acct.get("cash_account_type") or "").upper() == "SVGS":
+        return "savings"
     text = " ".join(
         str(acct.get(k, "")) for k in ("name", "product", "cash_account_type", "usage")
     ).lower()

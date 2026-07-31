@@ -2,6 +2,61 @@
 {% block title %}Settings{% endblock %}
 
 {% block content %}
+{% if error %}
+<section><p class="note down">Save failed: {{ error }}</p></section>
+{% endif %}
+
+<section>
+  <h2>Manual assets</h2>
+  <p class="note">Anything no API can tell you — cash at home, a car, a mortgage
+    (use a negative value for liabilities). Saving re-runs the manual collector
+    immediately, so changes show up right away. Leave the key blank on the last
+    row to skip adding it.</p>
+  <form method="post" action="/settings/assets">
+    <table class="data form">
+      <thead>
+        <tr><th>Key</th><th>Label</th><th>Kind</th><th class="num">Value</th>
+          <th>Currency</th><th>Liquid</th><th>As of</th><th class="num">Yield %</th></tr>
+      </thead>
+      <tbody>
+        {% for a in manual_assets %}
+        <tr>
+          <td><input name="key" value="{{ a.key }}"></td>
+          <td><input name="label" value="{{ a.label }}"></td>
+          <td><input name="kind" value="{{ a.kind }}"></td>
+          <td><input name="value" type="number" step="0.01" value="{{ a.value }}"></td>
+          <td><input name="currency" value="{{ a.currency }}"></td>
+          <td>
+            <select name="liquid">
+              <option value="true" {% if a.liquid %}selected{% endif %}>yes</option>
+              <option value="false" {% if not a.liquid %}selected{% endif %}>no</option>
+            </select>
+          </td>
+          <td><input name="as_of" value="{{ a.as_of or '' }}" placeholder="YYYY-MM-DD"></td>
+          <td><input name="yield" type="number" step="0.1" value="{{ a.expected_real_return_pct if a.expected_real_return_pct is defined else '' }}"></td>
+        </tr>
+        {% endfor %}
+        <tr>
+          <td><input name="key" value="" placeholder="new_key"></td>
+          <td><input name="label" value=""></td>
+          <td><input name="kind" value="other"></td>
+          <td><input name="value" type="number" step="0.01" value=""></td>
+          <td><input name="currency" value="EUR"></td>
+          <td>
+            <select name="liquid">
+              <option value="true">yes</option>
+              <option value="false">no</option>
+            </select>
+          </td>
+          <td><input name="as_of" value="" placeholder="YYYY-MM-DD"></td>
+          <td><input name="yield" type="number" step="0.1" value=""></td>
+        </tr>
+      </tbody>
+    </table>
+    <p><button class="primary" type="submit">Save</button></p>
+  </form>
+</section>
+
 <section>
   <h2>Saxo asset projection categories</h2>
   <p class="note">Each row compounds at its own rate in the Saxo asset projection.

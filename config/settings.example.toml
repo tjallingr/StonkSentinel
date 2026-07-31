@@ -31,8 +31,9 @@ app_id           = ""                              # or env ENABLEBANKING_APP_ID
 private_key_path = "secrets/enablebanking.pem"     # or env ENABLEBANKING_KEY_PATH
 
 # Must EXACTLY match one of the redirect URLs registered with the application,
-# trailing slash included.
-redirect_url = "http://localhost:8080/eb/callback"
+# trailing slash included. Enable Banking requires https even for localhost,
+# unlike Saxo below.
+redirect_url = "https://localhost:8080/eb/callback"
 
 # Bank names must match Enable Banking's ASPSP list exactly. Check with:
 #   python -m finoverview.auth.eb_link --list --country NL

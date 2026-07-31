@@ -8,7 +8,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 sudo useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin finoverview 2>/dev/null || true
 sudo mkdir -p "$APP_DIR" /etc/finoverview
 sudo rsync -a --delete \
-  --exclude '.git' --exclude 'data' --exclude 'secrets' \
+  --exclude '.git' --exclude 'data' --exclude 'secrets' --exclude '.env' \
   --exclude 'config/settings.toml' --exclude 'config/assets.toml' \
   "$REPO/" "$APP_DIR/"
 
@@ -31,6 +31,9 @@ echo "Next:"
 echo "  1. sudo cp config/settings.example.toml $APP_DIR/config/settings.toml  # then edit"
 echo "  2. sudo cp config/assets.example.toml   $APP_DIR/config/assets.toml    # then edit"
 echo "  3. put the Enable Banking RSA key at $APP_DIR/secrets/enablebanking.pem (chmod 600)"
-echo "  4. sudo -u finoverview $APP_DIR/.venv/bin/python -m finoverview.auth.eb_link --check"
-echo "  5. sudo systemctl enable --now finoverview-web.service"
-echo "  6. sudo systemctl enable --now finoverview-collect@{fx,manual,enablebanking,saxo}.timer"
+echo "  4. sudo cp .env.example /etc/finoverview/env && sudo chmod 600 /etc/finoverview/env"
+echo "     then edit in your app secrets, RESTIC_* and NTFY_URL"
+echo "  5. sudo -u finoverview $APP_DIR/.venv/bin/python -m finoverview.auth.eb_link --check"
+echo "  6. sudo systemctl enable --now finoverview-web.service"
+echo "  7. sudo systemctl enable --now finoverview-collect@{fx,manual,enablebanking,saxo}.timer"
+echo "  8. sudo systemctl enable --now finoverview-backup.timer"

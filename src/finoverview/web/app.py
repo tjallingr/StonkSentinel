@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -19,11 +20,17 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import db
+from ..collectors import get_collector
 from ..config import load_assets, load_settings
 from ..metrics import allocation, health, networth, projection, returns, saxo_projection
 from ..metrics.saxo_projection.categories import load_categories
 from .charts import area_chart, bar_rows, band_chart, pie_chart
-from .settings_store import parse_categories_form, save_categories
+from .settings_store import (
+    parse_assets_form,
+    parse_categories_form,
+    save_assets,
+    save_categories,
+)
 
 HERE = Path(__file__).parent
 
@@ -183,7 +190,7 @@ def projection_page(request: Request):
 
 
 @app.get("/settings", response_class=HTMLResponse)
-def settings_page(request: Request):
+def settings_page(request: Request, error: str | None = None):
     conn = get_conn()
     try:
         assets = load_assets(settings.config_dir)
@@ -194,6 +201,8 @@ def settings_page(request: Request):
         return templates.TemplateResponse(
             request, "settings.html",
             {"categories": categories,
+             "manual_assets": assets.assets,
+             "error": error,
              "collectors": collector_rows,
              "consents": consent_rows,
              "overall": health.overall(collector_rows, consent_rows)},
@@ -206,6 +215,21 @@ def settings_page(request: Request):
 async def save_saxo_projection_settings(request: Request):
     form = await request.form()
     save_categories(settings.config_dir, parse_categories_form(form))
+    return RedirectResponse("/settings", status_code=303)
+
+
+@app.post("/settings/assets")
+async def save_assets_settings(request: Request):
+    conn = get_conn()
+    try:
+        form = await request.form()
+        save_assets(settings.config_dir, parse_assets_form(form))
+        get_collector("manual")(conn, settings, load_assets(settings.config_dir)).run()
+    except Exception as exc:  # noqa: BLE001 - surface it to the settings page, not a 500
+        msg = quote(f"{type(exc).__name__}: {exc}")
+        return RedirectResponse(f"/settings?error={msg}", status_code=303)
+    finally:
+        conn.close()
     return RedirectResponse("/settings", status_code=303)
 
 
