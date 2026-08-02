@@ -1,26 +1,4 @@
-"""Saxo OpenAPI collector.
-
-Token lifecycle, which is the whole game here:
-  - access token  ~20 minutes
-  - refresh token ~24 hours, and each refresh issues a NEW refresh token
-
-So the collector must refresh on every run and persist the new refresh token
-immediately. As long as it runs at least once per 24h the connection lives
-indefinitely. If the Pi is down longer than the refresh window you must re-auth
-by hand via `python -m finoverview.auth.saxo_link`.
-
-Endpoints used:
-  GET /port/v1/clients/me
-  GET /port/v1/accounts/me
-  GET /port/v1/balances/me
-  GET /port/v1/netpositions/me
-  GET /port/v1/closedpositions/me     (optional, for realised results)
-
-VERIFY BEFORE TRUSTING: Saxo's cash-transfer / performance endpoints vary by
-account type and entitlement. `fetch_cash_flows` is marked experimental — run
-it once by hand, look at the payload, then wire it in. Until then record
-deposits in config/assets.toml under [[cash_flow]] so MWR stays correct.
-"""
+"""Saxo OpenAPI collector. Refresh tokens rotate every ~24h — collector must run daily."""
 
 from __future__ import annotations
 
@@ -153,21 +131,6 @@ class SaxoClient:
             "/port/v1/netpositions/me",
             FieldGroups="NetPositionBase,NetPositionView,DisplayAndFormat,ExchangeInfo",
         ).get("Data", [])
-
-    def closed_positions(self) -> list[dict]:
-        return self.get(
-            "/port/v1/closedpositions/me",
-            FieldGroups="ClosedPositionDetails,DisplayAndFormat",
-        ).get("Data", [])
-
-    # --- experimental ---------------------------------------------------
-    def fetch_cash_flows(self, client_key: str, from_date: str, to_date: str) -> dict:
-        """EXPERIMENTAL. Entitlement and payload shape vary by account. Run this
-        by hand once and inspect the output before relying on it. See module docstring."""
-        return self.get(
-            "/cs/v1/reports/aggregatedAmounts/" + client_key,
-            FromDate=from_date, ToDate=to_date,
-        )
 
     def close(self) -> None:
         self._client.close()

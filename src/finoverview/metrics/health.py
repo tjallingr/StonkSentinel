@@ -1,10 +1,4 @@
-"""Freshness and consent-expiry checks.
-
-This is the signature element of the dashboard, not an afterthought. A finance
-dashboard that silently serves three-week-old balances is worse than no dashboard,
-because you'll trust it. Every source gets a visible age and status, and consent
-expiry is surfaced weeks before it bites.
-"""
+"""Collector freshness and bank consent expiry checks."""
 
 from __future__ import annotations
 

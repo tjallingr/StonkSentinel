@@ -1,4 +1,4 @@
-.PHONY: install init collect run lint get-saxo-token
+.PHONY: install init collect run get-saxo-token
 
 install:
 	python3 -m venv .venv
@@ -12,9 +12,6 @@ collect:
 
 run:
 	PYTHONPATH=src .venv/bin/uvicorn finoverview.web.app:app --port 8080
-
-lint:
-	ruff check src
 
 get-saxo-token:
 	PYTHONPATH=src .venv/bin/python -m finoverview.auth.saxo_link

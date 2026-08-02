@@ -1,14 +1,4 @@
-"""Enable Banking collector (Rabobank, KBC).
-
-Auth is a JWT you sign with your own RSA private key — not a static API key.
-Header: {"typ": "JWT", "alg": "RS256", "kid": <application id>}
-Payload: {"iss": "enablebanking.com", "aud": "api.enablebanking.com", iat, exp}
-
-Sessions carry a PSD2 consent that expires (90-180 days depending on the bank).
-When a session expires the collector logs an error and the dashboard turns the
-source red; you then re-run `python -m finoverview.auth.eb_link` to re-consent.
-No aggregator can automate that step away — it's an SCA requirement.
-"""
+"""Enable Banking collector (Rabobank, KBC). PSD2 consent expires — re-run eb_link."""
 
 from __future__ import annotations
 

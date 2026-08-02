@@ -1,12 +1,4 @@
-"""One-time Saxo OAuth authorisation code flow.
-
-Run:  python -m finoverview.auth.saxo_link
-
-Same approach as eb_link: no callback server, copy the code out of the browser
-address bar. After this the collector keeps the connection alive by refreshing on
-every run. You only come back here if the Pi is offline long enough for the
-refresh token (~24h) to expire.
-"""
+"""Saxo OAuth flow. Run: python -m finoverview.auth.saxo_link"""
 
 from __future__ import annotations
 

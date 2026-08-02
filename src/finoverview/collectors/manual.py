@@ -1,9 +1,4 @@
-"""Manual assets, recurring items and hand-recorded cash flows, from config/assets.toml.
-
-This replaces the Excel sheet. The point of moving to TOML in git is that you get
-version history for free: `git log -p config/assets.toml` tells you when you
-revalued the car and what you changed it from. Excel gives you none of that.
-"""
+"""Manual assets, recurring items and cash flows from config/assets.toml."""
 
 from __future__ import annotations
 

@@ -1,13 +1,4 @@
-"""Fill the database with synthetic data so you can see the dashboard working
-before any real credential exists.
-
-Run:  python scripts/seed_demo.py
-Wipe: rm data/finance.db*
-
-Nothing in here touches a real API. It's a wiring test: if the numbers render,
-your schema, metrics and templates are sound and the only remaining unknown is
-the shape of the live API payloads.
-"""
+"""Seed synthetic data for local dashboard testing. Run: python scripts/seed_demo.py"""
 
 from __future__ import annotations
 
