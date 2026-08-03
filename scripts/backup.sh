@@ -12,6 +12,12 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/finoverview}"
+export PYTHONPATH="$APP_DIR/src"
+# The finoverview system user's home has no writable .cache — point restic at
+# a directory it does own rather than depend on RESTIC_CACHE_DIR surviving
+# every possible way this script gets invoked (systemd vs. manual sudo -u).
+export RESTIC_CACHE_DIR="${RESTIC_CACHE_DIR:-$APP_DIR/data/restic-cache}"
+mkdir -p "$RESTIC_CACHE_DIR"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 

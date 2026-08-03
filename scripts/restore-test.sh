@@ -2,6 +2,10 @@
 # Prove the backup works. Run this now, not after a failure.
 set -euo pipefail
 
+APP_DIR="${APP_DIR:-/opt/finoverview}"
+export RESTIC_CACHE_DIR="${RESTIC_CACHE_DIR:-$APP_DIR/data/restic-cache}"
+mkdir -p "$RESTIC_CACHE_DIR"
+
 if [ -n "${BACKUP_MOUNT_PATH:-}" ] && ! mountpoint -q "$BACKUP_MOUNT_PATH"; then
   echo "FAIL: $BACKUP_MOUNT_PATH not mounted — plug in the backup drive first"
   exit 1
