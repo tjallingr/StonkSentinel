@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark light">
+<meta name="color-scheme" content="light dark">
 <title>{% block title %}Finance overview{% endblock %}</title>
 <link rel="stylesheet" href="/static/app.css">
 <link rel="manifest" href="/manifest.webmanifest">
@@ -13,6 +13,7 @@
 
 <header class="health" aria-label="Data source status">
   <div class="health-inner">
+    <span class="health-label">sources</span>
     <span class="overall {{ overall }}">{{ overall }}</span>
     <ul class="sources">
       {% for c in collectors %}

@@ -1,11 +1,18 @@
 - use an actual repo and ORM instead of sql as string
 
-- remove orange text
+- DONE remove orange text. --warn is now used only for the tiny status dots, never
+  for text. notes, tags and the stale-data message are plain ink + a hairline rule.
 - make settings more phone friendly
 - make the otc/financeoverview/assets.toml and settings.toml WRITE as well: i need to be able to modify them from the app through the save button
 - remove projections assumptions field: should be clear from the per-item projections.
 - make projections clearer: should be visible what is profits and what is purely added cash. also per-item. also nominal vs real
-- ui stylee: less ai vibecoded vibes, more academic. i like the font though. performance is still key, do not create high proceessing power html or css
+- DONE ui stylee: less ai vibecoded vibes, more academic. kept the system fonts.
+  mono is now reserved for data (figures, ibans, dates, code); headings and labels
+  are sentence-case sans. tables are booktabs (rule above header, below header,
+  under last row, no interior rules). light/paper is the default, dark is a
+  selected variant. category palette re-solved and validated for colourblind
+  separation — the old one failed. no radii, shadows, gradients or transitions;
+  css rule bytes unchanged (~11.5k, 5.4k gzipped) and it paints fewer borders.
 - DONE new modul: cost analysis. /expenses page + `finoverview expenses`. groups by
   counterparty IBAN, excludes transfers between own accounts. transactions table +
   external_transactions/expenses views. still todo: category rollup if payee-only

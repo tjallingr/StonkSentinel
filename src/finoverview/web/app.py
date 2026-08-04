@@ -294,7 +294,7 @@ def manifest():
         "short_name": "Finance",
         "start_url": "/",
         "display": "standalone",
-        "background_color": "#0f1115",
-        "theme_color": "#0f1115",
+        "background_color": "#ffffff",
+        "theme_color": "#ffffff",
         "icons": [{"src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml"}],
     }, media_type="application/manifest+json")
