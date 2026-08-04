@@ -9,6 +9,7 @@ sudo useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin finoverview 2>
 sudo mkdir -p "$APP_DIR" /etc/finoverview
 sudo rsync -a --delete \
   --exclude '.git' --exclude 'data' --exclude 'secrets' --exclude '.env' \
+  --exclude '.venv' \
   --exclude 'config/settings.toml' --exclude 'config/assets.toml' \
   "$REPO/" "$APP_DIR/"
 
