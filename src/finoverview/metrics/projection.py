@@ -1,20 +1,4 @@
-"""Projections.
-
-Every assumption comes from [projection] in config/assets.toml. None are
-hardcoded, deliberately: a projection is an assumption engine with arithmetic
-attached, and if the assumptions aren't visible and version-controlled the output
-is decoration. The dashboard renders the assumptions next to the chart for the
-same reason.
-
-Two models:
-  deterministic  - each asset compounds at its own yield_pct and contribution
-                   (metrics.assets), summed. No volatility, so it never shows
-                   sequence risk.
-  monte_carlo    - lognormal annual returns around the value-weighted average
-                   yield across all assets, N paths, percentile bands. Shows the
-                   spread, still assumes iid returns and one blended volatility
-                   across every asset (no per-category volatility modelling).
-"""
+"""Projections from config/assets.toml — deterministic + Monte Carlo bands."""
 
 from __future__ import annotations
 
@@ -32,7 +16,6 @@ class Assumptions:
     years: int
     fallback_expected_real_return_pct: float
     volatility_pct: float
-    inflation_pct: float
     monthly_contribution: float | None
     contribution_growth_pct: float
     paths: int
@@ -44,7 +27,6 @@ class Assumptions:
             years=int(cfg.get("years", 20)),
             fallback_expected_real_return_pct=float(cfg.get("expected_real_return_pct", 5.0)),
             volatility_pct=float(cfg.get("volatility_pct", 15.0)),
-            inflation_pct=float(cfg.get("inflation_pct", 2.0)),
             monthly_contribution=(
                 float(cfg["monthly_contribution"]) if "monthly_contribution" in cfg else None
             ),
@@ -58,7 +40,6 @@ class Assumptions:
             ("Horizon", f"{self.years} years"),
             ("Fallback / unallocated return", f"{self.fallback_expected_real_return_pct:.1f}% / yr"),
             ("Volatility", f"{self.volatility_pct:.1f}%"),
-            ("Inflation", f"{self.inflation_pct:.1f}%"),
             ("Monthly contribution",
              f"{self.monthly_contribution:,.0f}" if self.monthly_contribution is not None
              else "from recurring net"),

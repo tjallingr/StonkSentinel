@@ -1,16 +1,4 @@
-"""Portfolio returns: TWR, MWR (money-weighted / IRR), and drawdown.
-
-Why this module exists at all: balance snapshots alone cannot tell you your
-return. A portfolio going 100k -> 110k might be 10% growth, or 5% growth plus a
-5k deposit. Separating the two requires cash flows. Everything here reads
-portfolio_cash_flows; if that table is empty the numbers below are wrong and the
-functions say so rather than quietly returning a plausible-looking figure.
-
-TWR   = compounded sub-period returns, bracketed by cash flows. Measures the
-        performance of the assets. This is what you compare against an index.
-MWR   = internal rate of return on the actual cash flow timeline. Measures your
-        outcome as an investor, including whether your timing helped.
-"""
+"""Portfolio returns: TWR, MWR, drawdown. Needs portfolio_cash_flows for correct numbers."""
 
 from __future__ import annotations
 

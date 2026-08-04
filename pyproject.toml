@@ -27,7 +27,3 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 finoverview = ["schema.sql", "web/templates/*.html", "web/static/*"]
-
-[tool.ruff]
-line-length = 100
-target-version = "py311"

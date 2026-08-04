@@ -158,21 +158,6 @@ class SaxoClient:
             FieldGroups="NetPositionBase,NetPositionView,DisplayAndFormat,ExchangeInfo",
         ).get("Data", [])
 
-    def closed_positions(self) -> list[dict]:
-        return self.get(
-            "/port/v1/closedpositions/me",
-            FieldGroups="ClosedPositionDetails,DisplayAndFormat",
-        ).get("Data", [])
-
-    # --- experimental ---------------------------------------------------
-    def fetch_cash_flows(self, client_key: str, from_date: str, to_date: str) -> dict:
-        """EXPERIMENTAL. Entitlement and payload shape vary by account. Run this
-        by hand once and inspect the output before relying on it. See module docstring."""
-        return self.get(
-            "/cs/v1/reports/aggregatedAmounts/" + client_key,
-            FromDate=from_date, ToDate=to_date,
-        )
-
     def close(self) -> None:
         self._client.close()
 

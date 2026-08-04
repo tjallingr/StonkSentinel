@@ -1,14 +1,10 @@
-"""Config loading. Everything tunable lives in TOML, nothing in code.
-
-Projection assumptions in particular MUST be config, not constants — a projection
-is only as meaningful as its assumptions, and unversioned assumptions are decoration.
-"""
+"""Config loading from TOML."""
 
 from __future__ import annotations
 
 import os
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -54,9 +50,6 @@ class Settings:
     def secrets_dir(self) -> Path:
         p = Path(self.raw["general"].get("secrets_dir", "secrets")).expanduser()
         return p if p.is_absolute() else (REPO_ROOT / p)
-
-    def section(self, name: str) -> dict[str, Any]:
-        return self.raw.get(name, {})
 
     # --- enable banking -------------------------------------------------
     @property

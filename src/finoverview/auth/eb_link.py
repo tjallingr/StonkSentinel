@@ -1,15 +1,4 @@
-"""One-time (well, every 90-180 days) Enable Banking consent flow.
-
-Run:  python -m finoverview.auth.eb_link
-
-There is deliberately no callback server here. The bank redirects your *browser*
-to your registered redirect URL; if nothing is listening the browser shows a
-connection error and the authorisation code is sitting right there in the address
-bar. Copy it, paste it in. Building an HTTP endpoint to receive a value you can
-read off the screen is work for no benefit.
-
-Repeat this whenever the dashboard shows a consent as expired or expiring.
-"""
+"""Enable Banking consent flow. Run: python -m finoverview.auth.eb_link"""
 
 from __future__ import annotations
 

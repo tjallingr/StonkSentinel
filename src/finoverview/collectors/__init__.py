@@ -1,6 +1,3 @@
-from .base import Collector  # noqa: F401
-
-
 def get_collector(name: str):
     """Lazy import so a broken optional dependency can't take down the whole CLI."""
     if name == "saxo":

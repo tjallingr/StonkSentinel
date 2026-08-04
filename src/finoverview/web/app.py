@@ -1,12 +1,4 @@
-"""Dashboard.
-
-Deliberate constraints, all of which follow from "minimal, on a Pi, over LAN":
-  - Zero external requests. No CDN, no webfonts, no analytics. A page showing
-    every balance you own should not phone anywhere.
-  - Charts are server-rendered SVG. No charting library, no build step, and the
-    page works with JavaScript disabled.
-  - The only JS is an auto-refresh timer.
-"""
+"""FastAPI dashboard."""
 
 from __future__ import annotations
 
@@ -130,14 +122,14 @@ def positions_page(request: Request):
         base = settings.base_currency
         rows = allocation.positions(conn, base)
         total = sum(r["value"] for r in rows)
+        collector_rows = health.collectors(conn, settings.stale_after_hours)
+        consent_rows = health.consents(conn)
         return templates.TemplateResponse(
             request, "positions.html",
             {"base": base, "positions": rows, "total": total,
-             "collectors": health.collectors(conn, settings.stale_after_hours),
-             "consents": health.consents(conn),
-             "overall": health.overall(
-                 health.collectors(conn, settings.stale_after_hours),
-                 health.consents(conn))},
+             "collectors": collector_rows,
+             "consents": consent_rows,
+             "overall": health.overall(collector_rows, consent_rows)},
         )
     finally:
         conn.close()
@@ -197,6 +189,7 @@ def projection_page(request: Request):
 def settings_page(request: Request, error: str | None = None):
     conn = get_conn()
     try:
+        base = settings.base_currency
         assets_cfg = load_assets(settings.config_dir)
         fallback_pct = float(assets_cfg.projection.get("expected_real_return_pct", 5.0))
         categories = asset_metrics.load_categories(assets_cfg.saxo_projection_categories, fallback_pct)
@@ -204,7 +197,8 @@ def settings_page(request: Request, error: str | None = None):
         consent_rows = health.consents(conn)
         return templates.TemplateResponse(
             request, "settings.html",
-            {"categories": categories,
+            {"base": base,
+             "categories": categories,
              "manual_assets": assets_cfg.assets,
              "error": error,
              "collectors": collector_rows,
@@ -250,30 +244,6 @@ def health_endpoint():
             {"status": overall, "collectors": collector_rows, "consents": consent_rows},
             status_code=200 if overall in ("ok", "warn") else 503,
         )
-    finally:
-        conn.close()
-
-
-@app.get("/api/summary")
-def api_summary():
-    conn = get_conn()
-    try:
-        base = settings.base_currency
-        s = networth.summary(conn, base)
-        return {
-            "net_worth": s["net_worth"],
-            "available": s["available"],
-            "encumbered": s["encumbered"],
-            "invested": s["invested"],
-            "cash": s["cash"],
-            "currency": base,
-            "accounts": [
-                {"label": a.label, "institution": a.institution, "kind": a.kind,
-                 "value": a.amount_base, "currency": base, "encumbered": a.encumbered,
-                 "as_of": a.ts}
-                for a in s["accounts"]
-            ],
-        }
     finally:
         conn.close()
 

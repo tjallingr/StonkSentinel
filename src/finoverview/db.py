@@ -1,13 +1,11 @@
-"""SQLite access. Plain sqlite3 on purpose: the store is append-only snapshots,
-an ORM buys nothing here and costs memory on a Pi."""
+"""SQLite access — append-only snapshots, plain sqlite3."""
 
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
@@ -43,22 +41,6 @@ def connect(path: str | Path) -> sqlite3.Connection:
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_PATH.read_text())
 
-
-@contextmanager
-def tx(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-    conn.execute("BEGIN")
-    try:
-        yield conn
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
-    else:
-        conn.execute("COMMIT")
-
-
-# --------------------------------------------------------------------------
-# accounts
-# --------------------------------------------------------------------------
 
 def upsert_account(
     conn: sqlite3.Connection,
@@ -101,14 +83,6 @@ def upsert_account(
     ).fetchone()
     return int(row["id"])
 
-
-def get_accounts(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    return conn.execute("SELECT * FROM accounts ORDER BY institution, label").fetchall()
-
-
-# --------------------------------------------------------------------------
-# snapshots
-# --------------------------------------------------------------------------
 
 def insert_balance(
     conn: sqlite3.Connection,

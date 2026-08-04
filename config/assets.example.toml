@@ -1,19 +1,4 @@
-# This file replaces the Excel sheet. Commit it. `git log -p config/assets.toml`
-# then tells you when you revalued something and what from — history Excel
-# never gave you.
-#
-# Copy to assets.toml. Unlike settings.toml this contains no secrets, so you can
-# safely keep it in a private repo.
-
-
-# --------------------------------------------------------------------------
-# Manually valued assets. Anything no API can tell you.
-# --------------------------------------------------------------------------
-
-# category and monthly_contribution feed the asset projection (see
-# [[saxo_projection_category]] below): category overrides the kind -> bucket
-# default (vehicle/property/other -> Other, savings -> Savings); leave it out
-# to use that default. monthly_contribution defaults to 0.
+# Copy to assets.toml. No secrets here — safe to commit in a private repo.
 
 [[asset]]
 key         = "car"
@@ -21,8 +6,8 @@ label       = "Car"
 kind        = "vehicle"
 value       = 14500.00
 currency    = "EUR"
-liquid      = false          # can't be spent this week
-as_of       = "2026-07-01"   # informational; when you last checked the value
+liquid      = false
+as_of       = "2026-07-01"
 
 [[asset]]
 key         = "cash-emergency"
@@ -32,7 +17,7 @@ value       = 500.00
 currency    = "EUR"
 liquid      = true
 
-# Example of a liability: use a negative value.
+# Liabilities: negative value.
 [[asset]]
 key         = "mortgage"
 label       = "Mortgage"
@@ -41,36 +26,15 @@ value       = -182000.00
 currency    = "EUR"
 liquid      = false
 
-
-# --------------------------------------------------------------------------
-# Override metadata on API-discovered accounts.
-# Keys are "provider:external_id" — the collectors print these on first run,
-# and eb_link prints them when you link a bank.
-#
-# This is where you mark the KBC collateral savings. It counts toward net worth
-# but not toward "available", so the dashboard stops implying you can spend it.
-#
-# category / yield_pct / monthly_contribution are for the asset projection only
-# (see [[saxo_projection_category]] below) — unlike label/kind/liquid/encumbered
-# above, they're read fresh at projection time, never written to the database.
-# Omit them to fall back to a kind -> category default with 0 yield/contribution.
-# --------------------------------------------------------------------------
-
+# Keys are "provider:external_id" — collectors print these on first run.
 [account_override."enablebanking:REPLACE_WITH_KBC_SAVINGS_UID"]
 label      = "KBC savings (collateral)"
 kind       = "savings"
 encumbered = true
-# yield_pct = 1.5
-# monthly_contribution = 100.00
 
 [account_override."enablebanking:REPLACE_WITH_RABO_SAVINGS_UID"]
 label = "Rabobank savings"
 kind  = "savings"
-
-
-# --------------------------------------------------------------------------
-# Recurring income and costs. Normalised to monthly on the dashboard.
-# --------------------------------------------------------------------------
 
 [[recurring]]
 key      = "salary"
@@ -107,22 +71,7 @@ currency = "EUR"
 period   = "yearly"
 category = "insurance"
 
-
-# --------------------------------------------------------------------------
-# Portfolio deposits and withdrawals.
-#
-# Read this bit even if you skip the rest: without cash flows, TWR and MWR are
-# wrong. A portfolio going 100k -> 110k is 10% growth, OR 5% growth plus a 5k
-# deposit, and balances alone cannot distinguish them.
-#
-# Saxo's cash-transfer endpoints vary by account entitlement, so the collector
-# does not assume it can read these. Record them here until you've verified
-# saxo.fetch_cash_flows against your own account.
-#
-# Sign: positive = money into the portfolio, negative = money out.
-# `account` matches either "provider:external_id" or an account label.
-# --------------------------------------------------------------------------
-
+# Cash flows needed for correct TWR/MWR. Positive = into portfolio.
 [[cash_flow]]
 id       = "2026-01-15-deposit"
 account  = "Saxo 12345678"
@@ -140,61 +89,16 @@ amount   = 1000.00
 currency = "EUR"
 kind     = "deposit"
 
-
-# --------------------------------------------------------------------------
-# Projection assumptions.
-#
-# These are in config rather than code on purpose: a projection is an assumption
-# engine with arithmetic attached. The dashboard prints them next to the chart
-# so the output can't be mistaken for a forecast.
-#
-# Every asset counting toward net worth compounds at its OWN yield and
-# contribution (see [[saxo_projection_category]] below and the per-asset
-# fields above) — expected_real_return_pct here is just the fallback used for
-# anything left uncategorised (the auto-injected "other" position category,
-# and the synthetic "unallocated savings" line covering any monthly_contribution
-# below or derived from recurring income that isn't assigned to a specific
-# asset). It's REAL (after inflation): 5% real for a diversified equity
-# portfolio is a common assumption, not a promise.
-# --------------------------------------------------------------------------
-
+# Real returns (after inflation). Assumptions shown on the projection page.
 [projection]
 years                    = 25
 expected_real_return_pct = 5.0
 volatility_pct           = 15.0
-inflation_pct            = 2.0
 contribution_growth_pct  = 1.0
 paths                    = 10000
-seed                     = 42        # remove for a different draw each run
+seed                     = 42
 
-# Omit monthly_contribution to derive it from your recurring income minus costs.
-# monthly_contribution = 800.00
-
-# Category the unallocated-savings line above falls into. Defaults to "Cash".
-# unallocated_category = "Cash"
-
-
-# --------------------------------------------------------------------------
-# Saxo asset projection categories.
-#
-# Buckets current Saxo holdings by ticker symbol into named categories, each
-# compounded at its own expected_real_return_pct (+ optional monthly_contribution),
-# feeding directly into the one unified asset projection above — not a separate
-# model. Symbols, not ISINs: Saxo's netpositions payload doesn't return ISIN for
-# these instruments, only Symbol (e.g. "IWDA:xams" -> match "IWDA").
-#
-# bucket is the coarse group (Equity/Bonds/Cash/Savings/Other) shown on the
-# overview donut. Leave it out and it defaults from the matched positions' own
-# Saxo asset type (equity/etf/fund -> Equity, bond -> Bonds, else Other) — set
-# it explicitly for anything that default gets wrong, e.g. a gold ETC isn't
-# really "Equity" just because Saxo files it as one.
-#
-# Any Saxo position whose symbol isn't listed below falls into "other", which
-# defaults to [projection].expected_real_return_pct unless defined here too.
-# Saxo cash balance always falls into "cash", which defaults to 0.0 unless
-# defined here.
-# --------------------------------------------------------------------------
-
+# Saxo holdings bucketed by symbol for per-category projection yields.
 [[saxo_projection_category]]
 key                      = "world_equity"
 label                    = "World Equity ETF"
