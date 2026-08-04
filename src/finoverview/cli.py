@@ -135,12 +135,7 @@ def cmd_project(args, settings, conn) -> int:
     out = projection.run(conn, settings.base_currency, assets_cfg)
     a = out["assumptions"]
 
-    print("ASSUMPTIONS")
-    for label, value in a.as_display():
-        print(f"  {label:<22} {value}")
-    print(f"  {'Weighted yield':<22} {out['weighted_yield_pct']:.1f}% / yr")
-
-    print(f"\nPROJECTION ({settings.base_currency}, real terms)")
+    print(f"PROJECTION ({settings.base_currency}, real terms)")
     print(f"  {'year':>5} {'p10':>14} {'p50':>14} {'p90':>14} {'deterministic':>14}")
     det = {d["year"]: d["value"] for d in out["deterministic"]}
     for band in out["monte_carlo"]["bands"]:
@@ -148,15 +143,23 @@ def cmd_project(args, settings, conn) -> int:
             continue
         print(f"  {band['year']:>5} {band['p10']:>14,.0f} {band['p50']:>14,.0f} "
               f"{band['p90']:>14,.0f} {det.get(band['year'], 0):>14,.0f}")
+    print(f"  {a.paths:,} paths, {a.volatility_pct:.1f}% volatility, "
+          f"{a.years}y horizon")
 
-    print(f"\nASSET PROJECTION ({settings.base_currency}, real terms)")
-    for asset in out["assets"]:
-        series = out["deterministic_by_asset"][asset.key]
-        print(f"  {asset.label:<24} {series[0]:>14,.0f} -> {series[-1]:>14,.0f}  "
-              f"({asset.yield_pct:.1f}%/yr, {asset.category}"
-              f"{f', +{asset.monthly_contribution:,.0f}/mo' if asset.monthly_contribution else ''})")
-    total = asset_metrics.combine(out["deterministic_by_asset"])
-    print(f"  {'Total':<24} {total[0]:>14,.0f} -> {total[-1]:>14,.0f}")
+    print(f"\nPER ASSET, IN {a.years} YEARS ({settings.base_currency})")
+    print(f"  {'asset':<24} {'rate':>6} {'monthly':>10} {'invested':>13} "
+          f"{'growth':>13} {'real':>13} {'nominal':>13}")
+    for r in out["asset_rows"]:
+        print(f"  {r['label'][:24]:<24} {r['rate']:>5.1f}% "
+              f"{(r['monthly'] or 0):>10,.0f} {r['invested']:>13,.0f} "
+              f"{r['growth']:>+13,.0f} {r['real']:>13,.0f} {r['nominal']:>13,.0f}")
+    t = out["totals"]
+    print(f"  {'Total':<24} {t['rate']:>5.1f}% {t['monthly']:>10,.0f} "
+          f"{t['invested']:>13,.0f} {t['growth']:>+13,.0f} {t['real']:>13,.0f} "
+          f"{t['nominal']:>13,.0f}")
+    print(f"\n  invested = {t['today']:,.0f} today + {t['contributed']:,.0f} paid in, "
+          f"no return applied")
+    print(f"  nominal restates real at {a.inflation_pct:.1f}%/yr assumed inflation")
     return 0
 
 

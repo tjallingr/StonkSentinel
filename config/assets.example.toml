@@ -101,9 +101,15 @@ amount   = 1000.00
 currency = "EUR"
 kind     = "deposit"
 
-# Real returns (after inflation). Assumptions shown on the projection page.
+# Per-asset rates are REAL returns (after inflation), so the projection is in
+# today's purchasing power. inflation_pct is used only to restate that in nominal
+# terms on the projection page — it is a forward assumption, not a measurement,
+# and it cannot be derived from the collected FX rates (those convert between
+# currencies, not between purchasing power in different years). 2.0 is the ECB
+# target. years and inflation_pct are editable from the app.
 [projection]
 years                    = 25
+inflation_pct            = 2.0
 expected_real_return_pct = 5.0
 volatility_pct           = 15.0
 contribution_growth_pct  = 1.0

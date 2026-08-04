@@ -1,22 +1,12 @@
 - use an actual repo and ORM instead of sql as string
 
-- DONE remove orange text. --warn is now used only for the tiny status dots, never
-  for text. notes, tags and the stale-data message are plain ink + a hairline rule.
-- make settings more phone friendly
+- DONE make settings more phone friendly. below 620px each form row becomes a
+  labelled card with full-width controls instead of an 11-column squeeze: input
+  width goes 23px -> 200px (~2 chars -> ~23). labels come from data-label on each
+  cell, mirroring the thead, so there's no second list to keep in sync. form
+  controls go to 16px on mobile because iOS Safari zooms the page below that.
+  desktop is untouched — every rule is inside the media query. row markup is now
+  a jinja macro so the blank "add new" row cannot drift out of field order with
+  the populated ones (that would silently misalign the parser's zip()).
 - make the otc/financeoverview/assets.toml and settings.toml WRITE as well: i need to be able to modify them from the app through the save button
-- remove projections assumptions field: should be clear from the per-item projections.
-- make projections clearer: should be visible what is profits and what is purely added cash. also per-item. also nominal vs real
-- DONE ui stylee: less ai vibecoded vibes, more academic. kept the system fonts.
-  mono is now reserved for data (figures, ibans, dates, code); headings and labels
-  are sentence-case sans. tables are booktabs (rule above header, below header,
-  under last row, no interior rules). light/paper is the default, dark is a
-  selected variant. category palette re-solved and validated for colourblind
-  separation — the old one failed. no radii, shadows, gradients or transitions;
-  css rule bytes unchanged (~11.5k, 5.4k gzipped) and it paints fewer borders.
-- DONE new modul: cost analysis. /expenses page + `finoverview expenses`. groups by
-  counterparty IBAN, excludes transfers between own accounts. transactions table +
-  external_transactions/expenses views. still todo: category rollup if payee-only
-  ever stops being enough.
-- pie chart: remove the three bars below it
-- make gold an etc instead of etf
-- add horizon setting: it is fixed at 20yrs now. 
+

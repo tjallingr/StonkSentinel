@@ -66,10 +66,6 @@
     </span>
   </h2>
 
-  {% if returns.warnings %}
-  {% for w in returns.warnings %}<p class="note">{{ w }}</p>{% endfor %}
-  {% endif %}
-
   <table class="data">
     <tbody>
       <tr><th scope="row">Time-weighted return
@@ -114,25 +110,7 @@
 {% endif %}
 
 {% if breakdown.position_count %}
-<section class="split">
-  {% for key, title in [("by_currency", "Currency"),
-                        ("by_country", "Country"), ("by_account", "Account")] %}
-  {% if bars[key] %}
-  <div>
-    <h3>{{ title }}</h3>
-    <ul class="bars">
-      {% for b in bars[key] %}
-      <li>
-        <span class="bar-label">{{ b.label }}</span>
-        <span class="bar-track"><span class="bar-fill" style="width:{{ "%.1f"|format(b.width) }}%"></span></span>
-        <span class="num small">{{ "%.1f"|format(b.pct) }}%</span>
-      </li>
-      {% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-  {% endfor %}
-</section>
+
 
 <section>
   <h2>Concentration</h2>

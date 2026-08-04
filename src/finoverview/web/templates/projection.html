@@ -3,7 +3,7 @@
 
 {% block content %}
 <section class="headline compact">
-  <p class="eyebrow">Projection · median outcome</p>
+  <p class="eyebrow">Projection · median outcome in {{ years }} years</p>
   <p class="figure">{{ terminal.p50 | money }} <span class="ccy">{{ base }}</span></p>
   <p class="meta">from {{ start | money }} today, {{ monthly_contribution | money }}/month ·
     p10 {{ terminal.p10 | money }} · p90 {{ terminal.p90 | money }}</p>
@@ -17,68 +17,70 @@
     <span class="key line-median"></span> median
     <span class="key line-det"></span> deterministic
   </p>
-</section>
-
-<section>
-  <h2>Assumptions</h2>
-  <table class="data">
-    <tbody>
-      {% for label, value in assumptions %}
-      <tr><th scope="row">{{ label }}</th><td class="num">{{ value }}</td></tr>
-      {% endfor %}
-      <tr><th scope="row">Weighted yield <small>value-weighted across every asset below</small></th>
-        <td class="num">{{ "%.1f"|format(weighted_yield_pct) }}% / yr</td></tr>
-      <tr><th scope="row">Total monthly contribution</th>
-        <td class="num">{{ total_monthly_contribution | money }}</td></tr>
-    </tbody>
-  </table>
-  <p class="note">{{ note }} Edit these in <code>config/assets.toml</code> under
-    <code>[projection]</code>. Returns are modelled as independent lognormal annual
-    draws, which understates the chance of long consecutive drawdowns — treat the
-    lower band as optimistic rather than a floor.</p>
+  {# What used to be a table of global assumptions. It belongs here as a caption:
+     these are properties of the simulation, not facts about your portfolio. The
+     per-asset rates and contributions live in the table below, where they can
+     actually be compared. #}
+  <p class="meta">{{ "{:,}".format(paths) }} simulated paths · lognormal annual
+    returns at {{ "%.1f"|format(volatility_pct) }}% volatility · real terms, in
+    today's purchasing power.</p>
+  {# The two lines on this chart do not agree, and hiding that would be worse than
+     explaining it. The bands come from one blended portfolio rate; the dashed
+     line compounds each asset separately. See the note in the table below. #}
+  {% if asset_rows %}
+  <p class="meta">Bands compound the whole portfolio at its blended
+    {{ "%.1f"|format(totals.rate) }}%/yr. The dashed line compounds each asset at
+    its own rate, so it sits above the median: your contributions go into the
+    higher-yielding assets rather than being spread at the average.</p>
+  {% endif %}
 </section>
 
 {% if asset_rows %}
 <section>
-  <h2>Asset projection</h2>
-  <ul class="bars">
-    {% for b in asset_bars %}
-    <li>
-      <span class="bar-label">{{ b.label }}</span>
-      <span class="bar-track"><span class="bar-fill" style="width:{{ "%.1f"|format(b.width) }}%"></span></span>
-      <span class="num small">{{ "%.1f"|format(b.pct) }}%</span>
-    </li>
-    {% endfor %}
-  </ul>
-  <table class="data">
-    <thead><tr><th>Asset</th><th>Category</th><th class="num">Rate</th>
-      <th class="num">Monthly</th>
-      <th class="num">Today</th><th class="num">In {{ asset_years }} years</th></tr></thead>
+  <h2>Per asset</h2>
+
+  <table class="data wide">
+    <thead>
+      <tr>
+        <th>Asset</th>
+        <th class="num">Rate</th>
+        <th class="num">Monthly</th>
+        <th class="num">Invested</th>
+        <th class="num">Growth</th>
+        <th class="num">Real</th>
+        <th class="num">Nominal</th>
+      </tr>
+    </thead>
     <tbody>
       {% for r in asset_rows %}
       <tr>
-        <th scope="row">{{ r.label }}</th>
-        <td class="dim">{{ r.category }}</td>
+        <th scope="row">{{ r.label }}
+          <small class="dim">{{ r.category }}{% if r.today %} · {{ r.today | money }} today{% endif %}</small></th>
         <td class="num dim">{{ "%.1f"|format(r.rate) }}%</td>
-        <td class="num dim">{{ r.contribution | money if r.contribution else "—" }}</td>
-        <td class="num dim">{{ r.start | money }}</td>
-        <td class="num">{{ r.end | money }}</td>
+        <td class="num dim">{{ r.monthly | money if r.monthly else "—" }}</td>
+        <td class="num">{{ r.invested | money }}</td>
+        <td class="num {{ 'up' if r.growth >= 0 else 'down' }}">{{ r.growth | signed(2) }}</td>
+        <td class="num">{{ r.real | money }}</td>
+        <td class="num dim">{{ r.nominal | money }}</td>
       </tr>
       {% endfor %}
       <tr class="emph">
-        <th scope="row">Total</th>
-        <td></td>
-        <td class="num"></td>
-        <td class="num"></td>
-        <td class="num dim">{{ asset_total_start | money }}</td>
-        <td class="num">{{ asset_total_end | money }}</td>
+        <th scope="row">Total
+          <small class="dim">{{ totals.today | money }} today</small></th>
+        <td class="num">{{ "%.1f"|format(totals.rate) }}%</td>
+        <td class="num">{{ totals.monthly | money }}</td>
+        <td class="num">{{ totals.invested | money }}</td>
+        <td class="num {{ 'up' if totals.growth >= 0 else 'down' }}">{{ totals.growth | signed(2) }}</td>
+        <td class="num">{{ totals.real | money }}</td>
+        <td class="num">{{ totals.nominal | money }}</td>
       </tr>
     </tbody>
   </table>
-  <p class="note">Every account and position counting toward net worth, each compounding
-    at its own rate and contribution — Saxo positions via <code>[[saxo_projection_category]]</code>,
-    manual assets via their own <code>[[asset]]</code> entry, everything else via
-    <code>[account_override]</code> or a kind-based default. Summed for the total above.</p>
+</section>
+{% else %}
+<section>
+  <p class="note">Nothing to project yet. Run the collectors, or add
+    <code>[[asset]]</code> entries to <code>config/assets.toml</code>.</p>
 </section>
 {% endif %}
 {% endblock %}

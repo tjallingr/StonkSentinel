@@ -57,6 +57,39 @@ def parse_categories_form(form) -> list[dict]:
     return categories
 
 
+def save_projection(config_dir: Path, values: dict) -> None:
+    """Patch only the given keys in [projection], leaving the rest of the table and
+    the file's comments where they are."""
+    path = config_dir / "assets.toml"
+    doc = tomlkit.parse(path.read_text())
+    projection = doc.get("projection")
+    if projection is None:
+        projection = tomlkit.table()
+        doc["projection"] = projection
+    for key, value in values.items():
+        projection[key] = value
+    path.write_text(tomlkit.dumps(doc))
+
+
+def parse_projection_form(form) -> dict:
+    """Horizon and inflation. Inflation is optional in the form so the settings page
+    and the projection page can each submit only the fields they show."""
+    out: dict[str, int | float] = {}
+    if "years" in form:
+        years = int((form.get("years") or "").strip())
+        if years <= 0:
+            raise ValueError("horizon must be a positive number of years")
+        out["years"] = years
+    if "inflation" in form and (form.get("inflation") or "").strip():
+        inflation = float(form.get("inflation").strip())
+        if not -20.0 <= inflation <= 100.0:
+            raise ValueError("inflation must be between -20 and 100 percent")
+        out["inflation_pct"] = inflation
+    if not out:
+        raise ValueError("empty form submission — nothing saved")
+    return out
+
+
 def _asset_table(a: dict) -> tomlkit.items.Table:
     t = tomlkit.table()
     t["key"] = a["key"]

@@ -20,8 +20,10 @@ from .charts import area_chart, bar_rows, band_chart, column_chart, pie_chart
 from .settings_store import (
     parse_assets_form,
     parse_categories_form,
+    parse_projection_form,
     save_assets,
     save_categories,
+    save_projection,
 )
 
 HERE = Path(__file__).parent
@@ -170,7 +172,7 @@ def expenses_page(request: Request, months: int = Query(12, ge=1, le=60),
 
 
 @app.get("/projection", response_class=HTMLResponse)
-def projection_page(request: Request):
+def projection_page(request: Request, error: str | None = None):
     conn = get_conn()
     try:
         base = settings.base_currency
@@ -178,45 +180,45 @@ def projection_page(request: Request):
         out = projection.run(conn, base, assets_cfg)
         bands = out["monte_carlo"]["bands"]
         det = out["deterministic"]
+        a = out["assumptions"]
         collector_rows = health.collectors(conn, settings.stale_after_hours)
         consent_rows = health.consents(conn)
-
-        total = asset_metrics.combine(out["deterministic_by_asset"])
-        total_start = total[0] or 1
-        asset_bars = bar_rows([
-            {"label": a.label, "value": a.value_base, "pct": a.value_base / total_start * 100}
-            for a in out["assets"] if a.value_base
-        ])
-        asset_rows = [
-            {"label": a.label, "category": a.category, "rate": a.yield_pct,
-             "contribution": a.monthly_contribution,
-             "start": a.value_base, "end": out["deterministic_by_asset"][a.key][-1]}
-            for a in out["assets"]
-        ]
 
         return templates.TemplateResponse(
             request, "projection.html",
             {"base": base,
-             "assumptions": out["assumptions"].as_display(),
-             "weighted_yield_pct": out["weighted_yield_pct"],
-             "total_monthly_contribution": out["total_monthly_contribution"],
              "bands": bands,
              "terminal": out["monte_carlo"]["terminal"],
              "monthly_contribution": out["monte_carlo"]["monthly_contribution"],
              "start": out["monte_carlo"]["start"],
              "chart": band_chart(bands, det, width=1040, height=260),
-             "note": out["monte_carlo"]["note"],
-             "asset_bars": asset_bars,
-             "asset_rows": asset_rows,
-             "asset_years": out["assumptions"].years,
-             "asset_total_start": total[0],
-             "asset_total_end": total[-1],
+             "asset_rows": out["asset_rows"],
+             "totals": out["totals"],
+             # Simulation parameters, for the caption under the chart.
+             "years": a.years,
+             "paths": a.paths,
+             "volatility_pct": a.volatility_pct,
+             "inflation_pct": a.inflation_pct,
+             "contribution_growth_pct": a.contribution_growth_pct,
              "collectors": collector_rows,
              "consents": consent_rows,
-             "overall": health.overall(collector_rows, consent_rows)},
+             "overall": health.overall(collector_rows, consent_rows),
+             "error": error},
         )
     finally:
         conn.close()
+
+
+@app.post("/projection/horizon")
+async def save_projection_horizon(request: Request):
+    try:
+        form = await request.form()
+        save_projection(settings.config_dir, parse_projection_form(form))
+    except Exception as exc:  # noqa: BLE001 - surface it to the projection page, not a 500
+        return RedirectResponse(
+            f"/projection?error={quote(f'{type(exc).__name__}: {exc}')}", status_code=303
+        )
+    return RedirectResponse("/projection", status_code=303)
 
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -226,6 +228,7 @@ def settings_page(request: Request, error: str | None = None):
         base = settings.base_currency
         assets_cfg = load_assets(settings.config_dir)
         fallback_pct = float(assets_cfg.projection.get("expected_real_return_pct", 5.0))
+        _proj = projection.Assumptions.from_config(assets_cfg.projection)
         categories = asset_metrics.load_categories(assets_cfg.saxo_projection_categories, fallback_pct)
         collector_rows = health.collectors(conn, settings.stale_after_hours)
         consent_rows = health.consents(conn)
@@ -234,6 +237,8 @@ def settings_page(request: Request, error: str | None = None):
             {"base": base,
              "categories": categories,
              "manual_assets": assets_cfg.assets,
+             "projection_years": _proj.years,
+             "projection_inflation": _proj.inflation_pct,
              "error": error,
              "collectors": collector_rows,
              "consents": consent_rows,
@@ -241,6 +246,18 @@ def settings_page(request: Request, error: str | None = None):
         )
     finally:
         conn.close()
+
+
+@app.post("/settings/projection")
+async def save_projection_settings(request: Request):
+    try:
+        form = await request.form()
+        save_projection(settings.config_dir, parse_projection_form(form))
+    except Exception as exc:  # noqa: BLE001 - surface it to the settings page, not a 500
+        return RedirectResponse(
+            f"/settings?error={quote(f'{type(exc).__name__}: {exc}')}", status_code=303
+        )
+    return RedirectResponse("/settings", status_code=303)
 
 
 @app.post("/settings/saxo-projection")

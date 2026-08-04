@@ -1,3 +1,16 @@
+def contributed(monthly_contribution: float, years: int,
+                contribution_growth_pct: float = 0.0) -> float:
+    """Total cash paid in over the horizon with no growth applied.
+
+    This is the flat line the projection is measured against: value today plus
+    this is what you would hold if every asset returned exactly nothing.
+    """
+    return sum(
+        monthly_contribution * 12 * (1 + contribution_growth_pct / 100) ** (year - 1)
+        for year in range(1, years + 1)
+    )
+
+
 def compound(value: float, rate_pct: float, years: int, *,
              monthly_contribution: float = 0.0,
              contribution_growth_pct: float = 0.0) -> list[float]:

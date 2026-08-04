@@ -479,7 +479,7 @@ footer {
 
 /* ------------------------------------------------------------------- forms */
 
-table.form input, table.form select {
+table.form input, table.form select, .field input {
   width: 100%;
   background: var(--bg);
   border: 1px solid var(--line);
@@ -488,12 +488,16 @@ table.form input, table.form select {
   font-size: 13px;
   padding: 0.28rem 0.4rem;
 }
-table.form input:focus, table.form select:focus {
+table.form input:focus, table.form select:focus, .field input:focus {
   outline: 1px solid var(--accent);
   outline-offset: -1px;
   border-color: var(--accent);
 }
-table.form input[type="number"] { text-align: right; font-family: var(--mono); }
+table.form input[type="number"], .field input[type="number"] { text-align: right; font-family: var(--mono); }
+
+.field { display: flex; align-items: center; gap: 0.6rem 0.9rem; flex-wrap: wrap; }
+.field label { display: flex; align-items: center; gap: 0.5rem; }
+.field input[type="number"] { width: 5em; }
 
 button.primary {
   background: var(--text);
@@ -524,6 +528,63 @@ a:focus-visible, summary:focus-visible, button:focus-visible {
   .bars li { grid-template-columns: minmax(0, 6.5rem) 1fr 3rem; }
   footer { flex-direction: column; gap: 0.3rem; }
   .pie-legend { min-width: 0; }
+
+  /* Data-entry tables get stacked, not scrolled.
+   *
+   * A read-only table can scroll sideways — you scan it, and losing a column off
+   * the edge costs you nothing you can't scroll back to. A form cannot: the
+   * column header is the field's only label, so scrolling hides what you are
+   * typing into at the moment you type. Ten columns across a 375px phone leaves
+   * about 23px of input, which is roughly two characters.
+   *
+   * So below this width every row becomes its own labelled block with full-width
+   * controls. The labels come from each cell's data-label, which mirrors the
+   * <thead> text, so there is no second list of names to keep in sync. Pure CSS,
+   * no JS, and the desktop table is untouched above this breakpoint. */
+  table.form { border-top: 0; }
+  table.form thead { display: none; }
+  table.form, table.form tbody, table.form tr, table.form td { display: block; }
+
+  table.form tr {
+    border: 1px solid var(--rule-soft);
+    padding: 0.5rem 0.7rem;
+    margin: 0 0 0.7rem;
+  }
+  table.form tbody tr:last-child td { border-bottom: 0; }
+
+  table.form td {
+    display: grid;
+    grid-template-columns: minmax(5.5rem, 7rem) 1fr;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.22rem 0;
+  }
+  table.form td::before {
+    content: attr(data-label);
+    color: var(--dim);
+    font-size: 12.5px;
+  }
+
+  /* Right-aligned numbers make sense in a column of them. In a stacked row it
+   * just parks the value far from its label. */
+  table.form input[type="number"] { text-align: left; }
+
+  /* The blank trailing row is an empty card otherwise, which reads as a glitch
+   * rather than an invitation. */
+  table.form tr.new { border-style: dashed; }
+  table.form tr.new::before {
+    content: "Add new";
+    display: block;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--dim);
+    margin-bottom: 0.35rem;
+  }
+
+  /* 16px is the threshold below which iOS Safari zooms the page on focus, which
+   * then leaves the form half off-screen. Cheaper to respect it than to fight it
+   * with a maximum-scale viewport that also blocks pinch-zoom. */
+  table.form input, table.form select, .field input { font-size: 16px; padding: 0.4rem 0.5rem; }
 }
 
 @media print {
