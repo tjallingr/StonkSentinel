@@ -2,12 +2,16 @@
 
 Token lifecycle, which is the whole game here:
   - access token  ~20 minutes
-  - refresh token ~24 hours, and each refresh issues a NEW refresh token
+  - refresh token: Saxo's own docs suggest ~24 hours, but observed in practice
+    on a live app the refresh token has died in as little as ~1 hour. Don't
+    trust the longer figure — the systemd timer (see systemd/drop-ins/saxo.conf)
+    runs every 15 minutes specifically because of this, not for price freshness.
+    Each refresh issues a NEW refresh token.
 
 So the collector must refresh on every run and persist the new refresh token
-immediately. As long as it runs at least once per 24h the connection lives
-indefinitely. If the Pi is down longer than the refresh window you must re-auth
-by hand via `python -m finoverview.auth.saxo_link`.
+immediately. If the Pi is down (or this timer isn't installed) longer than the
+actual refresh window, the connection dies and you must re-auth by hand via
+`python -m finoverview.auth.saxo_link`.
 
 Endpoints used:
   GET /port/v1/clients/me

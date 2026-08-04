@@ -1,6 +1,12 @@
 - use an actual repo and ORM instead of sql as string
-- use tailwind and no css style blocks in html page
-- run on Pi
-- create mobile version
-- simplify readme and complete make file
-- install ntfy and wire it to app 
+
+- remove orange text
+- make settings more phone friendly
+- make the otc/financeoverview/assets.toml and settings.toml WRITE as well: i need to be able to modify them from the app through the save button
+- remove projections assumptions field: should be clear from the per-item projections.
+- make projections clearer: should be visible what is profits and what is purely added cash. also per-item. also nominal vs real
+- ui stylee: less ai vibecoded vibes, more academic. i like the font though. performance is still key, do not create high proceessing power html or css
+- new modul: cost analysis. only concerns EB (rabobank and kbc expenses). keep track of expenses over time, monitor which acccount nrs receive the mmost moneey monthly and yearly from me, i need a cost oveerview. very basic
+- pie chart: remove the three bars below it
+- make gold an etc instead of etf
+- add horizon setting: it is fixed at 20yrs now. 
