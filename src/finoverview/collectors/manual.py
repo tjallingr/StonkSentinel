@@ -34,6 +34,9 @@ class ManualCollector(Collector):
                 provider="manual",
                 external_id=asset["key"],
                 institution=asset.get("institution", "Manual"),
+                # Optional. Giving a manual account its IBAN is what stops transfers
+                # into it being counted as expenses — see the expenses view.
+                iban=(asset.get("iban") or "").replace(" ", "").upper() or None,
                 label=asset["label"],
                 kind=asset.get("kind", "other"),
                 currency=asset["currency"].upper(),

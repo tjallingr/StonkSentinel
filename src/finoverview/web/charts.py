@@ -175,6 +175,111 @@ def band_chart(bands: list[dict], deterministic: list[dict],
     )
 
 
+def _column_path(x: float, y: float, w: float, h: float, r: float = 4.0) -> str:
+    """A column with a rounded cap and square feet. Rounding only the data end keeps
+    the baseline reading as a single hard line across every column."""
+    r = min(r, w / 2, h)
+    if r <= 0:
+        return f"M {x:.1f} {y:.1f} h {w:.1f} v {h:.1f} h {-w:.1f} Z"
+    return (
+        f"M {x:.1f} {y + h:.1f} "
+        f"L {x:.1f} {y + r:.1f} "
+        f"Q {x:.1f} {y:.1f} {x + r:.1f} {y:.1f} "
+        f"L {x + w - r:.1f} {y:.1f} "
+        f"Q {x + w:.1f} {y:.1f} {x + w:.1f} {y + r:.1f} "
+        f"L {x + w:.1f} {y + h:.1f} Z"
+    )
+
+
+def column_chart(rows: list[dict], width: int = 1040, height: int = 190,
+                 average: float | None = None, currency: str = "") -> str:
+    """Monthly spend. Columns, not an area: monthly totals are discrete buckets and
+    joining them with a slope implies a continuous quantity that doesn't exist.
+
+    One series, so one colour and no legend — the heading says what is plotted. The
+    current month is dimmed because it is still filling up, and comparing a
+    part-month column against complete ones is the mistake this chart invites.
+
+    No preserveAspectRatio override here (unlike the line charts): stretching would
+    skew the rounded caps and eat the 2px gaps that separate the columns.
+    """
+    if not rows:
+        return (f'<svg viewBox="0 0 {width} {height}" class="chart" role="img" '
+                f'aria-label="No transactions yet"><text x="{width/2}" y="{height/2}" '
+                f'text-anchor="middle" class="chart-empty">No transactions yet — run '
+                f'the enablebanking collector</text></svg>')
+
+    values = [r["spend"] for r in rows]
+    hi = max(max(values), average or 0) or 1
+    ticks = _nice_ticks(0, hi)
+    hi = max(hi, ticks[-1] if ticks else hi)
+
+    pad_r = 40                      # room for the right-hand y tick labels
+    iw = width - PAD_L - pad_r
+    ih = height - PAD_T - PAD_B
+    n = len(rows)
+    band = iw / n
+    # Cap the mark and let the leftover be air; the 2px is the surface gap.
+    bar_w = min(24.0, max(3.0, band - 2))
+
+    def y(v: float) -> float:
+        return PAD_T + ih - (ih * v / hi)
+
+    grid = []
+    for t in ticks:
+        gy = y(t)
+        if not (PAD_T - 1 <= gy <= PAD_T + ih + 1):
+            continue
+        grid.append(f'<line x1="{PAD_L}" y1="{gy:.1f}" x2="{PAD_L + iw:.1f}" '
+                    f'y2="{gy:.1f}" class="grid"/>')
+        grid.append(f'<text x="{PAD_L + iw + 5:.1f}" y="{gy + 3.5:.1f}" class="tick">'
+                    f'{escape(_fmt_short(t))}</text>')
+
+    peak = max(range(n), key=lambda i: values[i])
+    cols, labels = [], []
+    for i, r in enumerate(rows):
+        v = r["spend"]
+        x = PAD_L + band * i + (band - bar_w) / 2
+        h = max(0.0, ih - (y(v) - PAD_T))
+        partial = r.get("partial")
+        cls = "col partial" if partial else "col"
+        tip = (f'{r["month"]} — {v:,.2f}{(" " + currency) if currency else ""}'
+               f' · {r.get("count", 0)} payments'
+               f'{" · month still in progress" if partial else ""}')
+        cols.append(
+            f'<path d="{_column_path(x, y(v), bar_w, h)}" class="{cls}">'
+            f'<title>{escape(tip)}</title></path>'
+        )
+        # Label the peak only. A number on every column goes unread.
+        if i == peak and v:
+            labels.append(
+                f'<text x="{x + bar_w / 2:.1f}" y="{y(v) - 5:.1f}" text-anchor="middle" '
+                f'class="col-label">{escape(_fmt_short(v))}</text>'
+            )
+
+    ref = ""
+    if average:
+        ay = y(average)
+        ref = (f'<line x1="{PAD_L}" y1="{ay:.1f}" x2="{PAD_L + iw:.1f}" y2="{ay:.1f}" '
+               f'class="line ref"/>')
+
+    # Thin out month labels until they stop colliding.
+    step = max(1, math.ceil(n / 12))
+    xlabels = [
+        f'<text x="{PAD_L + band * i + band / 2:.1f}" y="{height - 4}" '
+        f'text-anchor="middle" class="tick">{escape(rows[i]["month"][2:])}</text>'
+        for i in range(n) if i % step == 0 or i == n - 1
+    ]
+
+    return (
+        f'<svg viewBox="0 0 {width} {height}" class="chart" role="img" '
+        f'aria-label="Spend per month from {escape(rows[0]["month"])} to '
+        f'{escape(rows[-1]["month"])}">'
+        f'{"".join(grid)}{ref}{"".join(cols)}{"".join(labels)}{"".join(xlabels)}'
+        f'</svg>'
+    )
+
+
 def _point(cx: float, cy: float, r: float, angle_deg: float) -> tuple[float, float]:
     a = math.radians(angle_deg)
     return cx + r * math.sin(a), cy - r * math.cos(a)

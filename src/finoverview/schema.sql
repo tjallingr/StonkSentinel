@@ -10,12 +10,14 @@ CREATE TABLE IF NOT EXISTS accounts (
     provider             TEXT    NOT NULL,           -- 'saxo' | 'enablebanking' | 'manual'
     external_id          TEXT    NOT NULL,           -- provider's own account identifier
     institution          TEXT,                       -- 'Rabobank' | 'KBC' | 'Saxo'
+    iban                 TEXT,                       -- own IBAN, when the provider gives one
     label                TEXT    NOT NULL,
     kind                 TEXT    NOT NULL,           -- checking|savings|brokerage|property|vehicle|other
     currency             TEXT    NOT NULL,
     liquid               INTEGER NOT NULL DEFAULT 1, -- 0 for illiquid assets (property, etc.)
     encumbered           INTEGER NOT NULL DEFAULT 0, -- 1 = pledged as collateral, not freely available
     include_in_networth  INTEGER NOT NULL DEFAULT 1,
+    tx_fetched_at        TEXT,                       -- last transaction fetch ATTEMPT
     created_at           TEXT    NOT NULL,
     UNIQUE (provider, external_id)
 );
@@ -81,6 +83,32 @@ CREATE TABLE IF NOT EXISTS portfolio_cash_flows (
 );
 CREATE INDEX IF NOT EXISTS idx_flow_ts ON portfolio_cash_flows (ts);
 
+-- Bank transactions from Enable Banking. Not a snapshot table: the same
+-- transaction is re-fetched on every overlapping window, so this one is an
+-- idempotent upsert on (account_id, external_id) rather than append-only.
+--
+-- Only BOOKED transactions land here. Pending ones mutate (amount and even
+-- counterparty change on settlement) and would churn rows for no benefit.
+CREATE TABLE IF NOT EXISTS transactions (
+    id                INTEGER PRIMARY KEY,
+    account_id        INTEGER NOT NULL REFERENCES accounts (id),
+    external_id       TEXT    NOT NULL,   -- bank's entry reference, or a synthetic digest
+    booking_date      TEXT    NOT NULL,   -- YYYY-MM-DD
+    value_date        TEXT,
+    amount_minor      INTEGER NOT NULL,   -- signed: negative = money left the account
+    currency          TEXT    NOT NULL,
+    counterparty      TEXT,               -- creditor/debtor name, as the bank spells it
+    counterparty_iban TEXT,
+    payee_key         TEXT,               -- IBAN if known, else folded name; the grouping key
+    description       TEXT,
+    bank_code         TEXT,               -- bank_transaction_code, kept for later triage
+    run_id            INTEGER REFERENCES collector_runs (id),
+    UNIQUE (account_id, external_id)
+);
+CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions (booking_date DESC);
+CREATE INDEX IF NOT EXISTS idx_tx_payee ON transactions (payee_key, booking_date DESC);
+CREATE INDEX IF NOT EXISTS idx_tx_account_date ON transactions (account_id, booking_date DESC);
+
 CREATE TABLE IF NOT EXISTS fx_rates (
     id     INTEGER PRIMARY KEY,
     as_of  TEXT NOT NULL,                            -- YYYY-MM-DD
@@ -144,6 +172,23 @@ JOIN (
     FROM position_snapshots
     GROUP BY account_id
 ) m ON m.account_id = p.account_id AND m.ts = p.ts;
+
+-- Transactions with transfers between your own accounts removed, both directions.
+-- A KBC -> Rabobank sweep is not an expense, and counting it would roughly double
+-- the monthly figure. Own IBANs come from accounts.iban, which the Enable Banking
+-- collector fills in automatically; add `iban = "..."` to an [[asset]] block for
+-- accounts it cannot see (a savings account at a bank you haven't linked).
+CREATE VIEW IF NOT EXISTS external_transactions AS
+SELECT t.*, a.label AS account_label, a.institution
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+WHERE t.counterparty_iban IS NULL
+   OR t.counterparty_iban NOT IN
+      (SELECT iban FROM accounts WHERE iban IS NOT NULL AND iban <> '');
+
+-- Money that actually left the household.
+CREATE VIEW IF NOT EXISTS expenses AS
+SELECT * FROM external_transactions WHERE amount_minor < 0;
 
 -- Freshness per collector: the dashboard's staleness indicator reads this.
 CREATE VIEW IF NOT EXISTS collector_health AS

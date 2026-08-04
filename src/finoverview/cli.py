@@ -5,6 +5,7 @@ Commands:
   collect              run collectors (all, or --only NAME)
   status               print freshness and consent state
   summary              print net worth, returns, allocation
+  expenses             print spend per month and biggest payees
   backup               vacuum the DB into a consistent single file
 """
 
@@ -18,7 +19,7 @@ from pathlib import Path
 from . import db
 from .collectors import ALL, get_collector
 from .config import load_assets, load_settings
-from .metrics import allocation, health, networth, projection, returns
+from .metrics import allocation, expenses, health, networth, projection, returns
 from .metrics import assets as asset_metrics
 
 
@@ -159,6 +160,35 @@ def cmd_project(args, settings, conn) -> int:
     return 0
 
 
+def cmd_expenses(args, settings, conn) -> int:
+    db.init_db(conn)
+    base = settings.base_currency
+    s = expenses.summary(conn, base, months=args.months)
+    if not s["tx_count"]:
+        print("No transactions stored. Run: finoverview collect --only enablebanking")
+        return 1
+
+    print(f"SPEND, LAST {args.months} MONTHS ({base})")
+    for m in s["series"]:
+        flag = " (partial)" if m["partial"] else ""
+        print(f"  {m['month']}  {m['spend']:>12,.2f}  in {m['income']:>12,.2f}  "
+              f"net {m['net']:>+12,.2f}  {m['count']:>4} payments{flag}")
+    if s["average"]:
+        print(f"  {'average':<9} {s['average']:>12,.2f}   (complete months only)")
+
+    print(f"\nBIGGEST PAYEES ({s['payee_count']} total)")
+    print(f"  {'payee':<30} {'account':<20} {'total':>12} {'/mo':>10} {'n':>5}")
+    for p in expenses.top_payees(conn, base, months=args.months, limit=args.top):
+        print(f"  {p['label'][:30]:<30} {(p['iban'] or '—')[:20]:<20} "
+              f"{p['total']:>12,.2f} {p['monthly']:>10,.2f} {p['count']:>5}")
+
+    cov = s["coverage"]
+    if cov and cov["a"]:
+        print(f"\n{s['tx_count']} transactions, {cov['a']} → {cov['b']}")
+    print("Transfers between your own accounts are excluded.")
+    return 0
+
+
 def cmd_backup(args, settings, conn) -> int:
     dest = Path(args.dest).expanduser()
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -185,6 +215,10 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("project")
 
+    p_exp = sub.add_parser("expenses")
+    p_exp.add_argument("--months", type=int, default=12)
+    p_exp.add_argument("--top", type=int, default=15)
+
     p_bak = sub.add_parser("backup")
     p_bak.add_argument("dest")
 
@@ -197,6 +231,7 @@ def main(argv: list[str] | None = None) -> int:
     handlers = {
         "init": cmd_init, "collect": cmd_collect, "status": cmd_status,
         "summary": cmd_summary, "project": cmd_project, "backup": cmd_backup,
+        "expenses": cmd_expenses,
     }
     try:
         return handlers[args.cmd](args, settings, conn)

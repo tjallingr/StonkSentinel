@@ -27,6 +27,9 @@ def save_categories(config_dir: Path, categories: list[dict]) -> None:
 
 
 def parse_categories_form(form) -> list[dict]:
+    # Same hazard as parse_assets_form: an empty body must not erase the table.
+    if "key" not in form:
+        raise ValueError("empty form submission — nothing saved")
     keys = form.getlist("key")
     labels = form.getlist("label")
     rates = form.getlist("rate")
@@ -62,6 +65,8 @@ def _asset_table(a: dict) -> tomlkit.items.Table:
     t["value"] = a["value"]
     t["currency"] = a["currency"]
     t["liquid"] = a["liquid"]
+    if a.get("iban"):
+        t["iban"] = a["iban"]
     if a.get("as_of"):
         t["as_of"] = a["as_of"]
     if a.get("expected_real_return_pct") is not None:
@@ -84,20 +89,29 @@ def save_assets(config_dir: Path, assets: list[dict]) -> None:
 
 
 def parse_assets_form(form) -> list[dict]:
+    # save_assets replaces the whole [[asset]] table, so a request that arrives with
+    # no fields at all would silently delete every asset. That is exactly what a
+    # truncated POST from a phone on a flaky link looks like, so refuse it: the
+    # caller turns this into a visible error instead of a wiped config.
+    if "key" not in form:
+        raise ValueError("empty form submission — nothing saved")
     keys = form.getlist("key")
     labels = form.getlist("label")
     kinds = form.getlist("kind")
     values = form.getlist("value")
     currencies = form.getlist("currency")
     liquids = form.getlist("liquid")
+    # Hidden field: not editable here, but it must survive a save.
+    ibans = form.getlist("iban")
     as_ofs = form.getlist("as_of")
     yields_ = form.getlist("yield")
     categories = form.getlist("category")
     contributions = form.getlist("contribution")
 
     assets = []
-    for key, label, kind, value, currency, liquid, as_of, yld, category, contribution in zip(
-        keys, labels, kinds, values, currencies, liquids, as_ofs, yields_, categories, contributions
+    for key, label, kind, value, currency, liquid, iban, as_of, yld, category, contribution in zip(
+        keys, labels, kinds, values, currencies, liquids, ibans, as_ofs, yields_,
+        categories, contributions
     ):
         key = key.strip()
         if not key:
@@ -110,6 +124,8 @@ def parse_assets_form(form) -> list[dict]:
             "currency": (currency.strip() or "EUR").upper(),
             "liquid": liquid == "true",
         }
+        if iban.strip():
+            asset["iban"] = iban.replace(" ", "").upper()
         if as_of.strip():
             asset["as_of"] = as_of.strip()
         if yld.strip():

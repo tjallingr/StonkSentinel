@@ -38,7 +38,26 @@ def connect(path: str | Path) -> sqlite3.Connection:
     return conn
 
 
+# Columns added to tables that already exist in the wild. schema.sql uses
+# CREATE TABLE IF NOT EXISTS, which silently does nothing to a table that is
+# already there — so a new column has to be ALTERed in by hand. Adding to this
+# list is safe and idempotent; it runs before the schema so views that reference
+# a new column can be created in the same pass.
+MIGRATIONS = [
+    ("accounts", "iban", "ALTER TABLE accounts ADD COLUMN iban TEXT"),
+    ("accounts", "tx_fetched_at", "ALTER TABLE accounts ADD COLUMN tx_fetched_at TEXT"),
+]
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, column, sql in MIGRATIONS:
+        cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if cols and column not in cols:
+            conn.execute(sql)
+
+
 def init_db(conn: sqlite3.Connection) -> None:
+    _migrate(conn)
     conn.executescript(SCHEMA_PATH.read_text())
 
 
@@ -51,6 +70,7 @@ def upsert_account(
     kind: str,
     currency: str,
     institution: str | None = None,
+    iban: str | None = None,
     liquid: bool = True,
     encumbered: bool = False,
     include_in_networth: bool = True,
@@ -62,11 +82,14 @@ def upsert_account(
     """
     conn.execute(
         """
-        INSERT INTO accounts (provider, external_id, institution, label, kind, currency,
+        INSERT INTO accounts (provider, external_id, institution, iban, label, kind, currency,
                               liquid, encumbered, include_in_networth, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT (provider, external_id) DO UPDATE SET
             institution = excluded.institution,
+            -- Never blank a known IBAN: /details can omit it on a flaky response,
+            -- and losing it would silently reclassify internal transfers as spend.
+            iban = COALESCE(excluded.iban, accounts.iban),
             label = excluded.label,
             kind = excluded.kind,
             currency = excluded.currency,
@@ -74,7 +97,7 @@ def upsert_account(
             encumbered = excluded.encumbered,
             include_in_networth = excluded.include_in_networth
         """,
-        (provider, external_id, institution, label, kind, currency,
+        (provider, external_id, institution, iban or None, label, kind, currency,
          int(liquid), int(encumbered), int(include_in_networth), utcnow()),
     )
     row = conn.execute(
@@ -142,6 +165,45 @@ def upsert_cash_flow(
         (account_id, ts, amount_minor, currency, kind, external_id, note),
     )
     return cur.rowcount > 0
+
+
+def upsert_transaction(conn: sqlite3.Connection, run_id: int | None = None,
+                       **kw: Any) -> bool:
+    """Store one booked transaction. Returns False if we already had it.
+
+    INSERT OR IGNORE rather than an UPDATE: a booked transaction is immutable, so
+    a second sighting carries no new information and re-writing it would only
+    churn the WAL on every overlapping fetch.
+    """
+    cols = ("account_id", "external_id", "booking_date", "value_date", "amount_minor",
+            "currency", "counterparty", "counterparty_iban", "payee_key", "description",
+            "bank_code")
+    values = [kw.get(c) for c in cols] + [run_id]
+    placeholders = ",".join("?" * (len(cols) + 1))
+    cur = conn.execute(
+        f"INSERT OR IGNORE INTO transactions ({','.join(cols)},run_id) "
+        f"VALUES ({placeholders})",
+        values,
+    )
+    return cur.rowcount > 0
+
+
+def latest_transaction_date(conn: sqlite3.Connection, account_id: int) -> str | None:
+    """Newest booking date we hold, for incremental fetching."""
+    row = conn.execute(
+        "SELECT MAX(booking_date) AS d FROM transactions WHERE account_id = ?",
+        (account_id,),
+    ).fetchone()
+    return row["d"] if row and row["d"] else None
+
+
+def mark_tx_fetched(conn: sqlite3.Connection, account_id: int) -> None:
+    """Record that we asked the bank for transactions, whether or not anything came
+    back. Rate limiting has to count attempts: a quiet account that returns no new
+    rows still spends a call from the daily budget."""
+    conn.execute(
+        "UPDATE accounts SET tx_fetched_at = ? WHERE id = ?", (utcnow(), account_id)
+    )
 
 
 def insert_fx(conn: sqlite3.Connection, as_of: str, base: str, quote: str, rate: float) -> bool:

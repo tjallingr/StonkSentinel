@@ -14,9 +14,9 @@ from fastapi.templating import Jinja2Templates
 from .. import db
 from ..collectors import get_collector
 from ..config import load_assets, load_settings
-from ..metrics import allocation, health, networth, projection, returns
+from ..metrics import allocation, expenses, health, networth, projection, returns
 from ..metrics import assets as asset_metrics
-from .charts import area_chart, bar_rows, band_chart, pie_chart
+from .charts import area_chart, bar_rows, band_chart, column_chart, pie_chart
 from .settings_store import (
     parse_assets_form,
     parse_categories_form,
@@ -135,6 +135,40 @@ def positions_page(request: Request):
         conn.close()
 
 
+@app.get("/expenses", response_class=HTMLResponse)
+def expenses_page(request: Request, months: int = Query(12, ge=1, le=60),
+                  payee: str | None = None):
+    conn = get_conn()
+    try:
+        base = settings.base_currency
+        summary = expenses.summary(conn, base, months=months)
+        payees = expenses.top_payees(conn, base, months=months)
+        collector_rows = health.collectors(conn, settings.stale_after_hours)
+        consent_rows = health.consents(conn)
+
+        payee_label = next(
+            (p["label"] for p in payees if p["payee_key"] == payee), payee
+        )
+        return templates.TemplateResponse(
+            request, "expenses.html",
+            {"base": base,
+             "months": months,
+             "summary": summary,
+             "payees": payees,
+             "payee": payee,
+             "payee_label": payee_label,
+             "txs": expenses.transactions(conn, base, payee_key=payee, months=months,
+                                          limit=200 if payee else 60),
+             "chart": column_chart(summary["series"], width=1040, height=190,
+                                   average=summary["average"], currency=base),
+             "collectors": collector_rows,
+             "consents": consent_rows,
+             "overall": health.overall(collector_rows, consent_rows)},
+        )
+    finally:
+        conn.close()
+
+
 @app.get("/projection", response_class=HTMLResponse)
 def projection_page(request: Request):
     conn = get_conn()
@@ -211,8 +245,13 @@ def settings_page(request: Request, error: str | None = None):
 
 @app.post("/settings/saxo-projection")
 async def save_saxo_projection_settings(request: Request):
-    form = await request.form()
-    save_categories(settings.config_dir, parse_categories_form(form))
+    try:
+        form = await request.form()
+        save_categories(settings.config_dir, parse_categories_form(form))
+    except Exception as exc:  # noqa: BLE001 - surface it to the settings page, not a 500
+        return RedirectResponse(
+            f"/settings?error={quote(f'{type(exc).__name__}: {exc}')}", status_code=303
+        )
     return RedirectResponse("/settings", status_code=303)
 
 

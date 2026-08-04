@@ -346,6 +346,18 @@ svg.chart .line.deterministic {
   stroke: var(--dim); stroke-width: 1.25; stroke-dasharray: 4 3;
 }
 
+/* One series, so one colour on every column — never darker-where-bigger, which
+ * would spend the hue channel restating the height. The current month is dimmed
+ * because it is incomplete, which is a state, not a value. */
+svg.chart .col { fill: var(--accent); }
+svg.chart .col.partial { fill: var(--accent); opacity: 0.4; }
+/* Reference line for the average. Dashed to separate it from the solid grid. */
+svg.chart .line.ref {
+  stroke: var(--dim); stroke-width: 1; stroke-dasharray: 3 3;
+}
+/* Text wears a text token, never the series colour. */
+svg.chart .col-label { fill: var(--dim); font: 10px var(--mono); }
+
 .legend {
   display: flex;
   flex-wrap: wrap;

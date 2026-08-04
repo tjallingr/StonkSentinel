@@ -46,6 +46,7 @@
 <nav aria-label="Sections">
   <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>Overview</a>
   <a href="/positions" {% if request.url.path == "/positions" %}aria-current="page"{% endif %}>Positions</a>
+  <a href="/expenses" {% if request.url.path == "/expenses" %}aria-current="page"{% endif %}>Expenses</a>
   <a href="/projection" {% if request.url.path == "/projection" %}aria-current="page"{% endif %}>Projection</a>
   <a href="/settings" {% if request.url.path == "/settings" %}aria-current="page"{% endif %}>Settings</a>
 </nav>

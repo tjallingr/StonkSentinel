@@ -17,6 +17,18 @@ value       = 500.00
 currency    = "EUR"
 liquid      = true
 
+# Give a manual account its IBAN and the expenses page stops counting money you
+# move into it as spending. Only needed for accounts Enable Banking can't see —
+# linked accounts learn their own IBAN on the first collect.
+[[asset]]
+key         = "crelan-savings"
+label       = "Crelan savings"
+kind        = "savings"
+value       = 7000.00
+currency    = "EUR"
+liquid      = true
+iban        = "BE00000000000000"
+
 # Liabilities: negative value.
 [[asset]]
 key         = "mortgage"

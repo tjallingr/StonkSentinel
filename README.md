@@ -2,6 +2,8 @@
 
 Personal finance dashboard that runs on a Raspberry Pi. Pulls balances from my banks (Enable Banking / PSD2) and Saxo, stores snapshots in SQLite, and shows net worth, returns, and some rough projections in a small FastAPI web UI.
 
+Also logs bank transactions and breaks down where the money goes — `/expenses`, or `finoverview expenses`. Grouped by counterparty IBAN, so "who do I pay the most" is answered by account number rather than by whatever name the bank printed that month. Transfers between my own accounts don't count as spending.
+
 
 Reach it on the LAN or from my phone over Tailscale.
 
@@ -37,6 +39,13 @@ On the Pi: `sudo ./scripts/install.sh`, enable the systemd units, point Tailscal
 ## Notes
 
 - Bank PSD2 consent expires every few months: have to re-auth by hand (one-command job).
+- **Run `collect --only enablebanking` immediately after `eb_link`.** Banks serve their
+  full transaction history for only about an hour after consent, then clamp to 90 days.
+  Wait and that history is gone until the next re-consent.
+- Banks allow ~4 unattended data fetches per account per day, and balances and
+  transactions share that budget. So account details are fetched once and cached, and
+  transactions at most once per 20h, while balances stay twice daily. A 429 from the
+  bank is logged and skipped, not treated as a failure.
 - Saxo refresh tokens need the collector running regularly or you re-auth.
 - Back up `data/finance.db` and `secrets/`. losing the Enable Banking key means starting over with the banks.
 

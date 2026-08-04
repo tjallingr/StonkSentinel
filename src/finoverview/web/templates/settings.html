@@ -22,7 +22,11 @@
       <tbody>
         {% for a in manual_assets %}
         <tr>
-          <td><input name="key" value="{{ a.key }}"></td>
+          {# Carried through hidden so saving this form can't drop it. Set it in
+             assets.toml; it only exists to keep transfers to your own accounts out
+             of the expense figures. #}
+          <td><input name="key" value="{{ a.key }}">
+            <input type="hidden" name="iban" value="{{ a.iban if a.iban is defined else '' }}"></td>
           <td><input name="label" value="{{ a.label }}"></td>
           <td><input name="kind" value="{{ a.kind }}"></td>
           <td><input name="value" type="number" step="0.01" value="{{ a.value }}"></td>
@@ -47,7 +51,8 @@
         </tr>
         {% endfor %}
         <tr>
-          <td><input name="key" value="" placeholder="new_key"></td>
+          <td><input name="key" value="" placeholder="new_key">
+            <input type="hidden" name="iban" value=""></td>
           <td><input name="label" value=""></td>
           <td><input name="kind" value="other"></td>
           <td><input name="value" type="number" step="0.01" value=""></td>

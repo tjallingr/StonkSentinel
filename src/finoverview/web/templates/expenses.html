@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Expenses{% endblock %}
+
+{% block content %}
+
+<section class="headline">
+  <p class="eyebrow">Spent this month</p>
+  <p class="figure">{{ (summary.this_month.spend if summary.this_month else 0) | money }}
+    <span class="ccy">{{ base }}</span></p>
+  <ul class="deltas">
+    <li>
+      <span class="delta-label">avg / mo</span>
+      <span class="num">{{ summary.average | money }}</span>
+    </li>
+    {% if summary.vs_average_pct is not none %}
+    <li>
+      <span class="delta-label">vs avg</span>
+      {# Under budget is the good outcome here, so the sign convention is inverted
+         relative to the net-worth deltas on the overview page. #}
+      <span class="num {{ 'down' if summary.vs_average_pct > 0 else 'up' }}">
+        {{ summary.vs_average_pct | pct }}</span>
+    </li>
+    {% endif %}
+    <li>
+      <span class="delta-label">payees</span>
+      <span class="num">{{ summary.payee_count }}</span>
+    </li>
+  </ul>
+  {{ chart | safe }}
+  <p class="meta">Month still in progress — the last column is partial.
+    Average excludes it. Dashed line is the average.</p>
+</section>
+
+{% if not summary.tx_count %}
+<p class="note">No transactions stored yet. Run
+  <code>finoverview collect --only enablebanking</code> — the first run backfills
+  history, so give it a minute.</p>
+{% else %}
+
+<section>
+  <h2>Per month
+    <span class="range">
+      {% for m, l in [(3, "3m"), (6, "6m"), (12, "1y"), (24, "2y")] %}
+      <a href="/expenses?months={{ m }}" {% if months == m %}aria-current="true"{% endif %}>{{ l }}</a>
+      {% endfor %}
+    </span>
+  </h2>
+  <table class="data">
+    <thead>
+      <tr><th>Month</th><th class="num">Spent</th><th class="num">Received</th>
+        <th class="num">Net</th><th class="num">Payments</th></tr>
+    </thead>
+    <tbody>
+      {% for m in summary.series | reverse %}
+      <tr>
+        <td class="mono">{{ m.month }}{% if m.partial %} <span class="tag">partial</span>{% endif %}</td>
+        <td class="num">{{ m.spend | money }}</td>
+        <td class="num dim">{{ m.income | money }}</td>
+        <td class="num {{ 'up' if m.net >= 0 else 'down' }}">{{ m.net | signed(2) }}</td>
+        <td class="num small dim">{{ m.count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Biggest payees</h2>
+  {% if not payees %}
+  <p class="note">Nothing in this window.</p>
+  {% else %}
+  <ul class="bars">
+    {% for p in payees[:8] %}
+    <li>
+      <span class="bar-label">{{ p.label }}
+        {% if p.iban %}<small class="dim mono">{{ p.iban }}</small>{% endif %}</span>
+      <span class="bar-track"><span class="bar-fill"
+        style="width:{{ "%.1f"|format(p.total / payees[0].total * 100) }}%"></span></span>
+      <span class="num small">{{ "%.1f"|format(p.pct) }}%</span>
+    </li>
+    {% endfor %}
+  </ul>
+
+  <table class="data wide">
+    <thead>
+      <tr><th>Payee</th><th>Account paid</th><th class="num">Total</th>
+        <th class="num">Per month</th><th class="num">Times</th>
+        <th class="num">Average</th><th class="num">Share</th><th>Last</th></tr>
+    </thead>
+    <tbody>
+      {% for p in payees %}
+      <tr>
+        <td><a href="/expenses?months={{ months }}&payee={{ p.payee_key | urlencode }}"
+          >{{ p.label }}</a></td>
+        <td class="mono small dim">{{ p.iban or "—" }}</td>
+        <td class="num">{{ p.total | money }}</td>
+        <td class="num dim">{{ p.monthly | money }}</td>
+        <td class="num small dim">{{ p.count }}</td>
+        <td class="num small dim">{{ p.avg | money }}</td>
+        <td class="num small">{{ "%.1f"|format(p.pct) }}%</td>
+        <td class="mono small dim">{{ p.last_seen }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section>
+  <h2>{% if payee %}Transactions — {{ payee_label }}{% else %}Recent transactions{% endif %}
+    {% if payee %}<span class="range"><a href="/expenses?months={{ months }}">clear filter</a></span>{% endif %}
+  </h2>
+  <table class="data wide">
+    <thead>
+      <tr><th>Date</th><th>Counterparty</th><th>Description</th>
+        <th>Account</th><th class="num">Amount</th></tr>
+    </thead>
+    <tbody>
+      {% for t in txs %}
+      <tr>
+        <td class="mono small">{{ t.date }}</td>
+        <td>{{ t.counterparty }}{% if t.iban %}
+          <small class="dim mono">{{ t.iban }}</small>{% endif %}</td>
+        <td class="dim small">{{ t.description or "" }}</td>
+        <td class="dim small">{{ t.account }}</td>
+        <td class="num {{ 'up' if t.amount > 0 else '' }}">{{ t.amount | signed(2) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="meta">
+    {{ summary.tx_count }} transactions stored
+    {% if summary.coverage and summary.coverage.a %}
+      · {{ summary.coverage.a }} → {{ summary.coverage.b }}
+    {% endif %}
+    · transfers between your own accounts are excluded
+  </p>
+</section>
+{% endif %}
+
+{% endblock %}

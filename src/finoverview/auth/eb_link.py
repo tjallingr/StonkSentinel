@@ -115,6 +115,14 @@ def main(argv: list[str] | None = None) -> int:
 
     client.close()
     print("\nDone. Now run: python -m finoverview.cli collect --only enablebanking")
+    # Deep transaction history is only served for roughly an hour after consent;
+    # after that most banks clamp to the last 90 days until the next re-consent.
+    # So the first collect is not merely the next step, it is time-critical.
+    print("\n>>> RUN IT NOW, not later. Most banks serve their full transaction")
+    print("    history only for about an hour after you consent, then drop to 90")
+    print("    days. The first collect is what backfills the expenses module, so")
+    print("    every hour you wait is history you cannot get back until the next")
+    print("    re-consent.")
     return 0
 
 
