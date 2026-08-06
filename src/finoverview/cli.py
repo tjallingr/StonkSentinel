@@ -6,6 +6,7 @@ Commands:
   status               print freshness and consent state
   summary              print net worth, returns, allocation
   expenses             print spend per month and biggest payees
+  accounts             per-account transaction coverage, for when a bank looks empty
   backup               vacuum the DB into a consistent single file
 """
 
@@ -64,7 +65,7 @@ def cmd_status(args, settings, conn) -> int:
     print("SOURCES")
     for c in rows:
         flag = {"ok": "  ok  ", "stale": " STALE", "error": " ERROR",
-                "never": " NEVER"}[c["status"]]
+                "never": " NEVER", "warn": " PARTIAL"}.get(c["status"], c["status"])
         print(f"  {flag}  {c['name']:<16} {c['age']:<12} {c['rows']} rows")
         if c["error"]:
             print(f"          {c['error'][:150]}")
@@ -194,6 +195,63 @@ def cmd_expenses(args, settings, conn) -> int:
     return 0
 
 
+def cmd_accounts(args, settings, conn) -> int:
+    """Per-account transaction coverage — the answer to "why is one bank empty?".
+
+    The collector-level status can only say the run worked. It cannot say that one
+    account of four never got past /details, or that its backfill died three months
+    ago and has been topping up a fragment ever since. This can.
+    """
+    db.init_db(conn)
+    rows = conn.execute(
+        """
+        SELECT a.id, a.provider, a.institution, a.label, a.iban, a.kind,
+               a.details_fetched_at, a.tx_fetched_at, a.tx_backfilled_at,
+               COUNT(t.id)          AS n,
+               MIN(t.booking_date)  AS first_tx,
+               MAX(t.booking_date)  AS last_tx
+        FROM accounts a
+        LEFT JOIN transactions t ON t.account_id = a.id
+        GROUP BY a.id
+        ORDER BY a.institution, a.label
+        """
+    ).fetchall()
+    if not rows:
+        print("No accounts. Run: finoverview collect")
+        return 1
+
+    print(f"  {'institution':<14} {'account':<26} {'IBAN':<20} {'txs':>6} "
+          f"{'range':<24} {'fetched':<12} back")
+    for r in rows:
+        span = f"{r['first_tx']} → {r['last_tx']}" if r["n"] else "—"
+        fetched = health.humanise(health.age_hours(r["tx_fetched_at"]))
+        back = "yes" if r["tx_backfilled_at"] else ("n/a" if r["provider"] != "enablebanking"
+                                                    else "NO")
+        print(f"  {(r['institution'] or r['provider'])[:14]:<14} {r['label'][:26]:<26} "
+              f"{(r['iban'] or '—')[:20]:<20} {r['n']:>6} {span:<24} "
+              f"{fetched:<12} {back}")
+
+    # The two states worth acting on, spelled out rather than left to be inferred
+    # from a table — this command exists because the failure was easy to miss.
+    banks = [r for r in rows if r["provider"] == "enablebanking"]
+    silent = [r for r in banks if not r["n"]]
+    unfinished = [r for r in banks if not r["tx_backfilled_at"]]
+    if silent:
+        print(f"\n{len(silent)} bank account(s) with no transactions at all:")
+        for r in silent:
+            why = ("never fetched" if not r["tx_fetched_at"]
+                   else f"last attempt {health.humanise(health.age_hours(r['tx_fetched_at']))}")
+            print(f"  - {r['institution']} {r['label']}: {why}")
+        print("  Check the journal for that account's error:")
+        print("    journalctl -u finoverview-collect@enablebanking -n 200 | grep -i "
+              "'transactions\\|rate\\|session'")
+    if unfinished:
+        print(f"\n{len(unfinished)} account(s) have no completed history backfill. "
+              f"Each run retries the deep walk; a bank that keeps rate-limiting it "
+              f"will need a re-consent (eb_link) followed immediately by a collect.")
+    return 0
+
+
 def cmd_backup(args, settings, conn) -> int:
     dest = Path(args.dest).expanduser()
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -224,6 +282,8 @@ def main(argv: list[str] | None = None) -> int:
     p_exp.add_argument("--months", type=int, default=12)
     p_exp.add_argument("--top", type=int, default=15)
 
+    sub.add_parser("accounts")
+
     p_bak = sub.add_parser("backup")
     p_bak.add_argument("dest")
 
@@ -236,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
     handlers = {
         "init": cmd_init, "collect": cmd_collect, "status": cmd_status,
         "summary": cmd_summary, "project": cmd_project, "backup": cmd_backup,
-        "expenses": cmd_expenses,
+        "expenses": cmd_expenses, "accounts": cmd_accounts,
     }
     try:
         return handlers[args.cmd](args, settings, conn)

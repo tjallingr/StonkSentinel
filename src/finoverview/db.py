@@ -60,6 +60,10 @@ def connect(path: str | Path) -> sqlite3.Connection:
 MIGRATIONS = [
     ("accounts", "iban", "ALTER TABLE accounts ADD COLUMN iban TEXT"),
     ("accounts", "tx_fetched_at", "ALTER TABLE accounts ADD COLUMN tx_fetched_at TEXT"),
+    ("accounts", "details_fetched_at",
+     "ALTER TABLE accounts ADD COLUMN details_fetched_at TEXT"),
+    ("accounts", "tx_backfilled_at",
+     "ALTER TABLE accounts ADD COLUMN tx_backfilled_at TEXT"),
 ]
 
 
@@ -220,6 +224,34 @@ def mark_tx_fetched(conn: sqlite3.Connection, account_id: int) -> None:
     )
 
 
+def mark_details_fetched(conn: sqlite3.Connection, account_id: int) -> None:
+    """Record that /details has been called for this account.
+
+    The call is what costs a slot in the bank's daily budget, so the call is what
+    gets remembered. Caching on "do we have an IBAN yet" instead would re-ask every
+    single run for any account whose bank does not return one — which is how an
+    account quietly spends its whole allowance on metadata it already has and never
+    gets a transaction fetch.
+    """
+    conn.execute(
+        "UPDATE accounts SET details_fetched_at = ? WHERE id = ?", (utcnow(), account_id)
+    )
+
+
+def mark_backfilled(conn: sqlite3.Connection, account_id: int) -> None:
+    """Record that a deep history walk ran to completion for this account.
+
+    Only set when the walk finished. A backfill that dies partway — rate limit,
+    timeout, a page that never came — leaves rows behind whose newest booking date
+    then looks exactly like a healthy watermark, and every later run would fetch
+    only the cheap incremental window on top of a fragment. That is history lost
+    silently, so the deep walk is retried until one of them actually finishes.
+    """
+    conn.execute(
+        "UPDATE accounts SET tx_backfilled_at = ? WHERE id = ?", (utcnow(), account_id)
+    )
+
+
 def insert_fx(conn: sqlite3.Connection, as_of: str, base: str, quote: str, rate: float) -> bool:
     cur = conn.execute(
         "INSERT OR IGNORE INTO fx_rates (as_of, base, quote, rate) VALUES (?,?,?,?)",
@@ -242,10 +274,22 @@ def start_run(conn: sqlite3.Connection, collector: str) -> int:
 
 def finish_run(conn: sqlite3.Connection, run_id: int, *, rows: int = 0,
                error: str | None = None) -> None:
+    """Close out a run. An error alongside rows is 'partial', not 'ok'.
+
+    Two banks are collected by one collector, so "Rabobank worked" used to be
+    enough to record the run as clean and leave the dashboard green while KBC had
+    been failing for weeks. Partial keeps the good rows and still says so.
+    """
+    if error and rows:
+        status = "partial"
+    elif error:
+        status = "error"
+    else:
+        status = "ok"
     conn.execute(
         "UPDATE collector_runs SET finished_at = ?, status = ?, rows_written = ?, error = ? "
         "WHERE id = ?",
-        (utcnow(), "error" if error else "ok", rows, error, run_id),
+        (utcnow(), status, rows, error, run_id),
     )
 
 

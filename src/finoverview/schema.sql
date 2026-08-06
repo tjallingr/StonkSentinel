@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     encumbered           INTEGER NOT NULL DEFAULT 0, -- 1 = pledged as collateral, not freely available
     include_in_networth  INTEGER NOT NULL DEFAULT 1,
     tx_fetched_at        TEXT,                       -- last transaction fetch ATTEMPT
+    details_fetched_at   TEXT,                       -- last /details call; caches the call, not the IBAN
+    tx_backfilled_at     TEXT,                       -- when a deep history walk last COMPLETED
     created_at           TEXT    NOT NULL,
     UNIQUE (provider, external_id)
 );

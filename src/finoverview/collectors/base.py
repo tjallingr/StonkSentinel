@@ -21,12 +21,20 @@ class Collector(ABC):
         self.conn = conn
         self.settings = settings
         self.assets = assets
+        self.partial: str | None = None
 
     @abstractmethod
     def collect(self, run_id: int) -> int:
-        """Fetch and write snapshots. Return the number of rows written."""
+        """Fetch and write snapshots. Return the number of rows written.
+
+        A collector that fans out over several sources — two banks behind one
+        Enable Banking session, say — should set `self.partial` to describe what
+        failed rather than swallow it. Returning rows and raising nothing is a
+        claim that everything worked, and "Rabobank worked" is not that claim.
+        """
 
     def run(self) -> int:
+        self.partial = None
         run_id = db.start_run(self.conn, self.name)
         try:
             rows = self.collect(run_id)
@@ -34,9 +42,10 @@ class Collector(ABC):
             log.exception("%s failed", self.name)
             db.finish_run(self.conn, run_id, error=f"{type(exc).__name__}: {exc}"[:2000])
             raise
-        db.finish_run(self.conn, run_id, rows=rows)
+        db.finish_run(self.conn, run_id, rows=rows, error=self.partial)
         db.prune_runs(self.conn)
-        log.info("%s wrote %d rows", self.name, rows)
+        log.info("%s wrote %d rows%s", self.name, rows,
+                 f" (partial: {self.partial})" if self.partial else "")
         return rows
 
     def apply_overrides(self, provider: str, external_id: str, defaults: dict) -> dict:

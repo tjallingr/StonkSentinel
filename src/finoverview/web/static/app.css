@@ -151,7 +151,8 @@ body {
   align-self: center;
 }
 .src.ok .dot, .src.consent-ok .dot            { background: var(--up); }
-.src.stale .dot, .src.consent-expiring .dot   { background: var(--warn); }
+.src.stale .dot, .src.warn .dot,
+.src.consent-expiring .dot                    { background: var(--warn); }
 .src.error .dot, .src.never .dot,
 .src.consent-expired .dot                     { background: var(--down); }
 

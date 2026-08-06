@@ -36,6 +36,10 @@
   <p class="health-msg">Some figures below are out of date. Check
     <code>finoverview status</code> on the host.</p>
   {% endif %}
+  {% for c in collectors if c.status == "warn" and c.error %}
+  <p class="health-msg">{{ c.name }} collected, but not from everything it should
+    have: {{ c.error }} — run <code>finoverview accounts</code> on the host.</p>
+  {% endfor %}
   {% for c in consents if c.status in ("expiring", "expired") %}
   <p class="health-msg">{{ c.institution }} bank consent
     {% if c.status == "expired" %}has expired{% else %}expires in

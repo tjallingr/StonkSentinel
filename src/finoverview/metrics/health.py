@@ -15,7 +15,7 @@ DEFAULT_STALE_HOURS = {
 CONSENT_WARN_DAYS = 14
 
 
-def _age_hours(ts: str | None) -> float | None:
+def age_hours(ts: str | None) -> float | None:
     if not ts:
         return None
     try:
@@ -44,7 +44,7 @@ def collectors(conn: sqlite3.Connection, thresholds: dict[str, float] | None = N
 
     out = []
     for r in rows:
-        age = _age_hours(r["finished_at"] or r["started_at"])
+        age = age_hours(r["finished_at"] or r["started_at"])
         limit = limits.get(r["collector"], 24.0)
         if r["status"] == "error":
             status = "error"
@@ -52,6 +52,11 @@ def collectors(conn: sqlite3.Connection, thresholds: dict[str, float] | None = N
             status = "error"        # a run stuck for over an hour is a failure
         elif age is None or age > limit:
             status = "stale"
+        elif r["status"] == "partial":
+            # Fresh, but one of the sources behind this collector failed. Ranked
+            # below stale on purpose: the numbers shown are current, some are just
+            # missing — and a missing bank is invisible unless it is said out loud.
+            status = "warn"
         else:
             status = "ok"
         out.append({
@@ -113,6 +118,8 @@ def overall(collector_rows: list[dict], consent_rows: list[dict]) -> str:
         return "error"
     if any(c["status"] == "stale" for c in collector_rows):
         return "stale"
+    if any(c["status"] == "warn" for c in collector_rows):
+        return "warn"
     if any(c["status"] == "expiring" for c in consent_rows):
         return "warn"
     return "ok"

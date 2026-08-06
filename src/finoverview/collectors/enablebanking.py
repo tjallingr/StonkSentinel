@@ -328,7 +328,7 @@ class EnableBankingCollector(Collector):
                 )
             for sess in sessions:
                 try:
-                    rows += self._collect_session(client, sess, run_id)
+                    rows += self._collect_session(client, sess, run_id, errors)
                 except Exception as exc:  # noqa: BLE001
                     # One dead bank must not stop the other.
                     msg = f"{sess['institution']}: {type(exc).__name__}: {exc}"
@@ -340,10 +340,15 @@ class EnableBankingCollector(Collector):
         if errors and rows == 0:
             raise RuntimeError("; ".join(errors))
         if errors:
+            # Recorded on the run, not just logged. A bank that has been silently
+            # failing while the other one works is the failure mode this whole
+            # collector is worst at showing, and journald is not where you look.
             log.warning("partial collection: %s", "; ".join(errors))
+            self.partial = "; ".join(errors)[:2000]
         return rows
 
-    def _collect_session(self, client: EnableBankingClient, sess, run_id: int) -> int:
+    def _collect_session(self, client: EnableBankingClient, sess, run_id: int,
+                         errors: list[str]) -> int:
         institution = sess["institution"]
         info = client.get_session(sess["session_id"])
 
@@ -352,83 +357,124 @@ class EnableBankingCollector(Collector):
         db.save_session(self.conn, "enablebanking", institution,
                         sess["session_id"], valid_until)
 
-        ts = db.utcnow()
-        rows = 0
-        for uid in info.get("accounts", []):
-            # /details costs one of the four daily unattended fetches, and account
-            # name, IBAN and type do not change. Fetch it once, then read it back
-            # from our own row so the budget is free for transactions.
-            known = self.conn.execute(
-                "SELECT iban, label, kind, currency FROM accounts "
-                "WHERE provider = 'enablebanking' AND external_id = ?",
-                (uid,),
-            ).fetchone()
-
-            if known and known["iban"]:
-                iban = known["iban"]
-                label, kind = known["label"], known["kind"]
-                currency = known["currency"]
-            else:
-                acct = client.details(uid)
-                iban = db.normalize_iban((acct.get("account_id") or {}).get("iban")) or ""
-                name = acct.get("name") or acct.get("product") or "Account"
-                label = f"{name} {iban[-4:]}" if iban else name
-                kind = _guess_kind(acct)
-                currency = (acct.get("currency") or "EUR").upper()
-
-            meta = self.apply_overrides("enablebanking", uid, {
-                "label": label,
-                "kind": kind,
-                "liquid": True,
-                "encumbered": False,
-                "include_in_networth": True,
-            })
-            account_id = db.upsert_account(
-                self.conn,
-                provider="enablebanking",
-                external_id=uid,
-                institution=institution,
-                iban=iban or None,
-                currency=currency,
-                **meta,
+        # A revoked or expired session still answers GET /sessions, often with an
+        # empty account list. Left unchecked that is a zero-row no-op with no
+        # exception: the bank simply stops appearing and the run still says ok.
+        status = (info.get("status") or "").upper()
+        uids = info.get("accounts") or []
+        if status and status != "AUTHORIZED":
+            raise RuntimeError(
+                f"session status is {status}, not AUTHORIZED — re-run "
+                f"python -m finoverview.auth.eb_link"
+            )
+        if not uids:
+            raise RuntimeError(
+                "session lists no accounts — the consent is probably dead; re-run "
+                "python -m finoverview.auth.eb_link"
             )
 
-            payload = client.balances(uid)
-            balances = payload.get("balances", [])
-            if balances:
-                chosen = _pick_balance(balances)
-                minor, ccy = _amount_to_minor(chosen["balance_amount"])
-                btype = chosen.get("balance_type") or chosen.get("balanceType") or "default"
-                as_of = chosen.get("reference_date") or chosen.get("last_change_date_time")
-
-                if db.insert_balance(
-                    self.conn,
-                    account_id=account_id,
-                    ts=ts,
-                    as_of=as_of,
-                    balance_minor=minor,
-                    currency=ccy,
-                    balance_type=btype,
-                    run_id=run_id,
-                ):
-                    rows += 1
-            else:
-                log.warning("%s/%s: no balances returned", institution, label)
-
-            # Transactions are a separate concern from balances: a bank that stops
-            # serving one often still serves the other, and this must not undo the
-            # balance row we just wrote.
+        rows = 0
+        for uid in uids:
+            # One unhealthy account must not take the rest of the bank with it.
+            # Without this, a single 429 on the first account's /details aborts the
+            # institution before any of its other accounts are even reached.
             try:
-                rows += self._collect_transactions(client, account_id, uid, run_id)
-            except EnableBankingError as exc:
-                if exc.code == "ASPSP_RATE_LIMIT_EXCEEDED":
-                    # Expected, not a fault: we are inside the bank's 4-a-day budget
-                    # for balances and simply have no call left for transactions.
-                    log.info("%s/%s: transaction budget spent, next run will retry",
-                             institution, label)
-                else:
-                    log.warning("%s/%s: transactions failed (%s): %s",
-                                institution, label, exc.code or exc.status, exc)
+                rows += self._collect_account(client, institution, uid, run_id)
+            except Exception as exc:  # noqa: BLE001
+                msg = f"{institution}/{uid[:8]}: {type(exc).__name__}: {exc}"
+                log.error(msg)
+                errors.append(msg)
+        return rows
+
+    def _collect_account(self, client: EnableBankingClient, institution: str,
+                         uid: str, run_id: int) -> int:
+        ts = db.utcnow()
+        rows = 0
+
+        # /details costs one of the four daily unattended fetches, and account
+        # name, IBAN and type do not change. Fetch it once, then read it back
+        # from our own row so the budget is free for transactions.
+        known = self.conn.execute(
+            "SELECT iban, label, kind, currency, details_fetched_at FROM accounts "
+            "WHERE provider = 'enablebanking' AND external_id = ?",
+            (uid,),
+        ).fetchone()
+
+        if known and known["details_fetched_at"]:
+            iban = known["iban"] or ""
+            label, kind = known["label"], known["kind"]
+            currency = known["currency"]
+            fetched_details = False
+        else:
+            acct = client.details(uid)
+            # _iban_of, not account_id["iban"] directly: banks that identify an
+            # account only by a local number under `other` would otherwise be
+            # stored with no identifier at all, and every transfer to them would
+            # keep counting as spending.
+            iban = _iban_of(acct.get("account_id")) or ""
+            name = acct.get("name") or acct.get("product") or "Account"
+            label = f"{name} {iban[-4:]}" if iban else name
+            kind = _guess_kind(acct)
+            currency = (acct.get("currency") or "EUR").upper()
+            fetched_details = True
+
+        meta = self.apply_overrides("enablebanking", uid, {
+            "label": label,
+            "kind": kind,
+            "liquid": True,
+            "encumbered": False,
+            "include_in_networth": True,
+        })
+        account_id = db.upsert_account(
+            self.conn,
+            provider="enablebanking",
+            external_id=uid,
+            institution=institution,
+            iban=iban or None,
+            currency=currency,
+            **meta,
+        )
+        # After the upsert, which is what creates the row on the first run.
+        if fetched_details:
+            db.mark_details_fetched(self.conn, account_id)
+
+        payload = client.balances(uid)
+        balances = payload.get("balances", [])
+        if balances:
+            chosen = _pick_balance(balances)
+            minor, ccy = _amount_to_minor(chosen["balance_amount"])
+            btype = chosen.get("balance_type") or chosen.get("balanceType") or "default"
+            as_of = chosen.get("reference_date") or chosen.get("last_change_date_time")
+
+            if db.insert_balance(
+                self.conn,
+                account_id=account_id,
+                ts=ts,
+                as_of=as_of,
+                balance_minor=minor,
+                currency=ccy,
+                balance_type=btype,
+                run_id=run_id,
+            ):
+                rows += 1
+        else:
+            log.warning("%s/%s: no balances returned", institution, label)
+
+        # Transactions are a separate concern from balances: a bank that stops
+        # serving one often still serves the other, and this must not undo the
+        # balance row we just wrote.
+        try:
+            rows += self._collect_transactions(client, account_id, uid, run_id)
+        except EnableBankingError as exc:
+            if exc.code == "ASPSP_RATE_LIMIT_EXCEEDED":
+                # Expected, not a fault: we are inside the bank's 4-a-day budget
+                # for balances and simply have no call left for transactions.
+                log.info("%s/%s: transaction budget spent, next run will retry",
+                         institution, label)
+            else:
+                log.warning("%s/%s: transactions failed (%s): %s",
+                            institution, label, exc.code or exc.status, exc)
+                raise
         return rows
 
     def _collect_transactions(self, client: EnableBankingClient, account_id: int,
@@ -440,7 +486,8 @@ class EnableBankingCollector(Collector):
         transaction fetch on every run.
         """
         row = self.conn.execute(
-            "SELECT tx_fetched_at FROM accounts WHERE id = ?", (account_id,)
+            "SELECT tx_fetched_at, tx_backfilled_at FROM accounts WHERE id = ?",
+            (account_id,),
         ).fetchone()
         if row and row["tx_fetched_at"]:
             age = (datetime.now(timezone.utc)
@@ -454,14 +501,21 @@ class EnableBankingCollector(Collector):
         # retry immediately and burn the rest of the daily budget on a broken bank.
         db.mark_tx_fetched(self.conn, account_id)
 
+        backfilled = bool(row and row["tx_backfilled_at"])
         watermark = db.latest_transaction_date(self.conn, account_id)
-        if watermark:
+        if backfilled and watermark:
             start = date.fromisoformat(watermark) - timedelta(days=TX_OVERLAP_DAYS)
             strategy = "default"
         else:
-            # First ever fetch. `longest` never raises WRONG_TRANSACTIONS_PERIOD when
-            # the bank can't serve the range — it just returns what it has — at the
-            # cost of possibly more ASPSP calls, which is the right trade once.
+            # No completed deep walk yet. `longest` never raises
+            # WRONG_TRANSACTIONS_PERIOD when the bank can't serve the range — it just
+            # returns what it has — at the cost of possibly more ASPSP calls, which is
+            # the right trade until one walk gets all the way through.
+            #
+            # Deliberately NOT resumed from the watermark: rows from an aborted walk
+            # say nothing about how far back it got, only how recent the newest page
+            # was. Starting from the watermark would freeze the history at whatever
+            # fragment happened to land before the rate limit hit.
             start = date.today() - timedelta(days=TX_BACKFILL_DAYS)
             strategy = "longest"
 
@@ -514,6 +568,13 @@ class EnableBankingCollector(Collector):
                 ) or None,
             ):
                 rows += 1
+
+        # Only reached if the whole walk drained without raising. Anything that cuts
+        # it short — rate limit, timeout, a page that never came — leaves the flag
+        # unset and the deep walk is attempted again next run.
+        if not backfilled:
+            db.mark_backfilled(self.conn, account_id)
+            log.info("account %s: backfill complete", account_id)
 
         if skipped:
             log.warning("account %s: skipped %d transactions missing a date, amount "
