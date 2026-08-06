@@ -1,13 +1,17 @@
-# Fired by OnFailure= when a collector fails. Always logs to the journal; also
-# posts to $NTFY_URL (set in /etc/finoverview/env) if one is configured. Reads
-# the target from the env file rather than this unit so `install.sh` can keep
-# overwriting this file on every re-run without wiping out your notification
-# setup. A silent collector failure is the failure mode of this project.
+# Fired by OnFailure= when a collector or the backup fails. Always logs to the
+# journal; also posts to $NTFY_URL (set in /etc/finoverview/env) if one is
+# configured. Reads the target from the env file rather than this unit so
+# `install.sh` can keep overwriting this file on every re-run without wiping out
+# your notification setup. A silent collector failure is the failure mode of
+# this project.
 [Unit]
 Description=finance-overview failure notification (%i)
 
 [Service]
 Type=oneshot
 User=finoverview
+# Needed to read back the reason the failing unit logged. Without it journalctl
+# returns nothing and every alert degrades to "something failed".
+SupplementaryGroups=systemd-journal
 EnvironmentFile=-/etc/finoverview/env
-ExecStart=/bin/sh -c 'echo "finoverview %i FAILED on $(hostname) at $(date -Is)" | systemd-cat -t finoverview -p err; [ -n "${NTFY_URL:-}" ] && curl -fsS -d "finoverview %i failed on $(hostname)" "$NTFY_URL"; true'
+ExecStart=/opt/finoverview/scripts/alert.sh %i

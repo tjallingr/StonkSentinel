@@ -5,6 +5,12 @@ set -euo pipefail
 APP_DIR=/opt/finoverview
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
+# restic is what the backup timer runs. It was previously assumed to be present,
+# which turns a missing package into a nightly 03:30 alert rather than a setup step.
+if ! command -v restic >/dev/null 2>&1; then
+  sudo apt-get install -y restic
+fi
+
 sudo useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin finoverview 2>/dev/null || true
 sudo mkdir -p "$APP_DIR" /etc/finoverview
 sudo rsync -a --delete \
@@ -37,4 +43,11 @@ echo "     then edit in your app secrets, RESTIC_* and NTFY_URL"
 echo "  5. sudo -u finoverview $APP_DIR/.venv/bin/python -m finoverview.auth.eb_link --check"
 echo "  6. sudo systemctl enable --now finoverview-web.service"
 echo "  7. sudo systemctl enable --now finoverview-collect@{fx,manual,enablebanking,saxo}.timer"
-echo "  8. sudo systemctl enable --now finoverview-backup.timer"
+echo "  8. backup drive, if you use one instead of B2:"
+echo "       sudo mkdir -p /mnt/backup-hdd && add it to /etc/fstab, then mount it"
+echo "       sudo chown finoverview:finoverview /mnt/backup-hdd   # restic runs as finoverview"
+echo "       set RESTIC_REPOSITORY=/mnt/backup-hdd/restic-repo and"
+echo "           BACKUP_MOUNT_PATH=/mnt/backup-hdd in /etc/finoverview/env"
+echo "       backup.sh creates the repository itself on first run"
+echo "  9. sudo systemctl enable --now finoverview-backup.timer"
+echo " 10. sudo -u finoverview $APP_DIR/scripts/restore-test.sh   # prove it restores"
