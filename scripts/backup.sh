@@ -29,8 +29,18 @@ if [ -n "${BACKUP_MOUNT_PATH:-}" ] && ! mountpoint -q "$BACKUP_MOUNT_PATH"; then
   exit 0
 fi
 
-: "${RESTIC_REPOSITORY:?set RESTIC_REPOSITORY in /etc/finoverview/env}"
-: "${RESTIC_PASSWORD_FILE:?set RESTIC_PASSWORD_FILE in /etc/finoverview/env}"
+# Unset almost always means "run by hand" rather than "misconfigured":
+# /etc/finoverview/env is root-owned 0600 and is read by systemd, not by this
+# script, so `sudo -u finoverview backup.sh` starts with none of it. Say that,
+# rather than sending you to an env file that is probably already correct.
+if [ -z "${RESTIC_REPOSITORY:-}" ] || [ -z "${RESTIC_PASSWORD_FILE:-}" ]; then
+  if [ -z "${INVOCATION_ID:-}" ]; then
+    die "no RESTIC_* in the environment. This script gets those from "\
+"/etc/finoverview/env, which only systemd can read. Run it as the unit instead: "\
+"sudo systemctl start finoverview-backup.service && journalctl -u finoverview-backup -n 40"
+  fi
+  die "RESTIC_REPOSITORY / RESTIC_PASSWORD_FILE not set in /etc/finoverview/env"
+fi
 [ -r "$RESTIC_PASSWORD_FILE" ] \
   || die "cannot read RESTIC_PASSWORD_FILE=$RESTIC_PASSWORD_FILE as $(id -un)"
 
