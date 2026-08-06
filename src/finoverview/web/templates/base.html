@@ -44,7 +44,7 @@
   <p class="health-msg">{{ c.institution }} bank consent
     {% if c.status == "expired" %}has expired{% else %}expires in
     {{ "%.0f"|format(c.days_left) }} days{% endif %} — re-run
-    <code>python -m finoverview.auth.eb_link</code>.</p>
+    <code>{{ c.fix }}</code>.</p>
   {% endfor %}
 </header>
 

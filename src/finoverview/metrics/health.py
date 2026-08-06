@@ -107,6 +107,34 @@ def consents(conn: sqlite3.Connection) -> list[dict]:
             "valid_until": r["valid_until"],
             "days_left": days,
             "status": status,
+            "fix": "python -m finoverview.auth.eb_link",
+        })
+
+    # OAuth grants (Saxo) are on a completely different clock: the refresh token
+    # lives about an hour and is rotated on every collect, so "expires in 40
+    # minutes" is the healthy steady state and warning on it would mean a
+    # permanent alarm. Only a grant that has ALREADY lapsed is worth saying —
+    # at that point no amount of retrying helps and a human has to re-auth.
+    # Written on every refresh and, until now, read by nothing.
+    for r in conn.execute("SELECT * FROM oauth_tokens").fetchall():
+        if not r["refresh_expires_at"]:
+            continue
+        try:
+            dt = datetime.fromisoformat(r["refresh_expires_at"].replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        left = (dt - datetime.now(timezone.utc)).total_seconds() / 86400
+        if left > 0:
+            continue
+        out.append({
+            "provider": r["provider"],
+            "institution": r["provider"].title(),
+            "valid_until": r["refresh_expires_at"],
+            "days_left": left,
+            "status": "expired",
+            "fix": f"python -m finoverview.auth.{r['provider']}_link",
         })
     return out
 

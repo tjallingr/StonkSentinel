@@ -76,20 +76,28 @@ class SaxoClient:
         self._access_token: str | None = None
 
     # --- tokens ---------------------------------------------------------
-    def ensure_token(self) -> str:
+    def ensure_token(self, *, force: bool = False) -> str:
+        """A usable access token, refreshing the grant once per process.
+
+        Deliberately does NOT reuse a stored access token that still has minutes
+        left on it. That reads like an optimisation and is the opposite: every
+        refresh mints a new refresh token with a full lifetime, so refreshing is
+        the thing that keeps the connection alive. With a ~20 minute access token
+        and a 15 minute timer, reusing meant roughly every other run skipped its
+        refresh — rotating only every ~30 minutes against a refresh token that
+        dies in ~60, so two missed runs killed the connection instead of four.
+
+        Within one process the token is reused; `force` is for a 401 mid-run,
+        where the point is precisely to get a different token.
+        """
+        if self._access_token and not force:
+            return self._access_token
+
         row = db.load_tokens(self.conn, "saxo")
         if row is None or not row["refresh_token"]:
             raise SaxoAuthError(
                 "No stored Saxo refresh token. Run: python -m finoverview.auth.saxo_link"
             )
-
-        # Reuse a still-valid access token to avoid burning refreshes needlessly.
-        if row["access_token"] and row["access_expires_at"]:
-            expires = datetime.fromisoformat(row["access_expires_at"])
-            if expires - timedelta(minutes=2) > datetime.now(timezone.utc):
-                self._access_token = row["access_token"]
-                return self._access_token
-
         return self.refresh(row["refresh_token"])
 
     def refresh(self, refresh_token: str) -> str:
@@ -102,8 +110,11 @@ class SaxoClient:
         if resp.status_code >= 400:
             raise SaxoAuthError(
                 f"Refresh failed ({resp.status_code}): {resp.text[:400]}. "
-                "If the refresh token expired (Pi offline >24h), re-run "
-                "python -m finoverview.auth.saxo_link"
+                "The refresh token has lapsed — observed at ~1h on live, not the "
+                "24h the docs suggest, so any gap longer than that in the 15-min "
+                "timer is enough. Check the timer is actually running every 15 "
+                "minutes (systemctl list-timers 'finoverview*'), then re-auth by "
+                "hand: python -m finoverview.auth.saxo_link"
             )
         data = resp.json()
         now = datetime.now(timezone.utc)
@@ -130,7 +141,9 @@ class SaxoClient:
             params={k: v for k, v in params.items() if v is not None} or None,
         )
         if resp.status_code == 401:
-            token = self.ensure_token()
+            # force: the token we just used is the one that was rejected, so
+            # handing back the same cached value would retry the same failure.
+            token = self.ensure_token(force=True)
             resp = self._client.get(
                 f"{self.api_base}{path}",
                 headers={"Authorization": f"Bearer {token}"},

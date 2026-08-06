@@ -44,6 +44,18 @@ sudo "$APP_DIR/.venv/bin/pip" install --upgrade pip
 sudo "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 
 sudo cp "$REPO"/systemd/*.service "$REPO"/systemd/*.timer /etc/systemd/system/
+
+# Per-collector schedule overrides. These were a documented manual step, which
+# meant the shipped 4-hourly default silently applied to saxo — whose refresh
+# token dies in about an hour. The result is a connection that breaks overnight,
+# every time, and a README that explains why nobody read. Install them.
+for conf in "$REPO"/systemd/drop-ins/*.conf; do
+  [ -e "$conf" ] || continue
+  name="$(basename "$conf" .conf)"
+  sudo mkdir -p "/etc/systemd/system/finoverview-collect@${name}.timer.d"
+  sudo cp "$conf" "/etc/systemd/system/finoverview-collect@${name}.timer.d/override.conf"
+done
+
 sudo systemctl daemon-reload
 
 # daemon-reload only reloads the unit definitions; a running service keeps the
