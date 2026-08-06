@@ -9,3 +9,15 @@ User=finoverview
 WorkingDirectory=/opt/finoverview
 EnvironmentFile=/etc/finoverview/env
 ExecStart=/opt/finoverview/scripts/backup.sh
+
+# systemd disables the start timeout for Type=oneshot by default. On a USB drive
+# that stops answering, restic blocks in uninterruptible I/O and the unit then
+# sits in `activating` forever — holding the job queue so every later start,
+# including tomorrow's timer, refuses to run. Nothing alerts, because the unit
+# never fails; it just never finishes. A bound turns that into a failure, which
+# fires OnFailure= and actually tells you.
+TimeoutStartSec=45min
+# Same reason on the way out: a hung stop leaves the unit un-restartable.
+TimeoutStopSec=60s
+KillSignal=SIGTERM
+SendSIGKILL=yes

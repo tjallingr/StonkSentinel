@@ -57,9 +57,34 @@ case "$RESTIC_REPOSITORY" in
 "the SD card instead" ;;
       esac
     fi
+    # A read-only remount is its own diagnosis with its own fix, and restic
+    # reports it as the same "unable to create lock in backend" you get from a
+    # permissions problem. Separate them here: ext4 flips itself to ro after an
+    # I/O error, and ntfs-3g refuses rw on a volume Windows left dirty.
+    if [ -n "${BACKUP_MOUNT_PATH:-}" ]; then
+      # `|| true` matters: findmnt exits non-zero for a path that isn't a mount,
+      # and under `set -e` the assignment would take the whole script down with
+      # no message at all — a silent backup failure, which is the one outcome
+      # this script must never produce.
+      opts=",$(findmnt -no OPTIONS "$BACKUP_MOUNT_PATH" 2>/dev/null || true),"
+      case "$opts" in
+        *,ro,*) die "$BACKUP_MOUNT_PATH is mounted READ-ONLY. Usually the "\
+"filesystem was flipped after an I/O error — check: sudo dmesg -T | tail -40, "\
+"then unmount and fsck it before remounting rw." ;;
+      esac
+    fi
+
     parent="$(dirname "$RESTIC_REPOSITORY")"
     [ -w "$parent" ] || die "$parent is not writable by $(id -un) — the drive is "\
 "probably mounted root-owned; fix with: sudo chown finoverview:finoverview $parent"
+    # The repo directory itself, when it already exists. The parent being
+    # writable says nothing about a repo created earlier by root — which is
+    # exactly what "unable to create lock in backend" is: restic can read the
+    # repo it found and cannot write a lock into it.
+    if [ -d "$RESTIC_REPOSITORY" ] && [ ! -w "$RESTIC_REPOSITORY" ]; then
+      die "$RESTIC_REPOSITORY exists but is not writable by $(id -un) — it was "\
+"probably created by root. Fix with: sudo chown -R finoverview:finoverview $RESTIC_REPOSITORY"
+    fi
     ;;
 esac
 
