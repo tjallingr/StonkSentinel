@@ -88,22 +88,65 @@ case "$RESTIC_REPOSITORY" in
     ;;
 esac
 
+# Run a restic command, keeping its output. On failure the last lines go into
+# the reason, because restic already knows exactly what went wrong and any
+# summary this script invents on top is a guess that can be wrong — reporting
+# "the password does not match" for a repository that has been backing up fine
+# for a week sends you to fix the one thing that isn't broken.
+run_restic() {
+  local label="$1"; shift
+  local out
+  if out="$(restic "$@" 2>&1)"; then
+    [ -n "$out" ] && printf '%s\n' "$out"
+    return 0
+  fi
+  printf '%s\n' "$out" >&2
+  die "$label: $(printf '%s' "$out" | grep -v '^$' | tail -3 | tr '\n' ' | ')"
+}
+
 # A drive yanked mid-run leaves a lock behind, and every later run then fails
 # with "repository is already locked". Stale locks only: `unlock` without
 # --remove-all will not touch a lock held by a process that is still alive.
+# Not fatal on its own — an unwritable repo fails here too, and the probe below
+# reports that far better than this would.
 restic unlock >/dev/null 2>&1 || true
 
 # A new drive has no repository on it, and `restic backup` will not create one.
-# init is idempotent in the way that matters: on an existing repo it refuses,
-# which tells us the repo is there but the password is wrong — a different fault
-# with a different fix, so they get different messages.
-if ! restic cat config >/dev/null 2>&1; then
-  if restic init >/dev/null 2>&1; then
-    echo "initialised a new restic repository at $RESTIC_REPOSITORY" \
-      | systemd-cat -t finoverview -p notice
+# But "cat config failed" has several causes and only one of them is a missing
+# repository, so branch on what restic actually said rather than assuming.
+if ! probe="$(restic cat config 2>&1 >/dev/null)"; then
+  # Is the repository actually absent? For a local path the filesystem answers
+  # that directly, and it is the only trustworthy answer: restic says "unable to
+  # open config file" both for a repo that is not there and for one it is not
+  # allowed to read, and treating the second as the first sends you to create a
+  # repository that already exists.
+  repo_absent=0
+  case "$RESTIC_REPOSITORY" in
+    /*) [ -e "$RESTIC_REPOSITORY/config" ] || repo_absent=1 ;;
+    *)  case "$probe" in
+          *"Is there a repository"*|*"does not exist"*) repo_absent=1 ;;
+        esac ;;
+  esac
+
+  if [ "$repo_absent" -eq 1 ]; then
+    if init_err="$(restic init 2>&1 >/dev/null)"; then
+      echo "initialised a new restic repository at $RESTIC_REPOSITORY" \
+        | systemd-cat -t finoverview -p notice
+    else
+      die "no repository at $RESTIC_REPOSITORY and it could not be created: "\
+"$(printf '%s' "$init_err" | grep -v '^$' | tail -2 | tr '\n' ' | ')"
+    fi
   else
-    die "no usable repository at $RESTIC_REPOSITORY — init failed. If the repo "\
-"does exist, the password in $RESTIC_PASSWORD_FILE does not match it."
+    case "$probe" in
+      *"wrong password"*|*"invalid password"*)
+        die "the password in $RESTIC_PASSWORD_FILE does not match the repository "\
+"at $RESTIC_REPOSITORY" ;;
+      *)
+        # Permission denied, an I/O error, a half-written repo. Whatever it is,
+        # restic already said it — pass it through untouched.
+        die "the repository at $RESTIC_REPOSITORY exists but cannot be opened: "\
+"$(printf '%s' "$probe" | grep -v '^$' | tail -3 | tr '\n' ' | ')" ;;
+    esac
   fi
 fi
 
@@ -121,13 +164,10 @@ cp -a "$APP_DIR/config/settings.toml" "$STAGE/" 2>/dev/null || true
 cp -a "$APP_DIR/config/assets.toml"   "$STAGE/" 2>/dev/null || true
 cp -a "$APP_DIR/secrets"              "$STAGE/" 2>/dev/null || true
 
-restic backup --tag finoverview --host "$(hostname)" "$STAGE" \
-  || die "restic backup failed (disk full, drive disconnected mid-run, or I/O error)"
-restic forget --tag finoverview --prune \
-  --keep-daily 14 --keep-weekly 8 --keep-monthly 24 \
-  || die "restic forget/prune failed — snapshots were written, retention was not applied"
-restic check --read-data-subset=5% \
-  || die "restic check found repository damage — do NOT trust this repo, run "\
-"restic check --read-data in full"
+run_restic "restic backup failed" backup --tag finoverview --host "$(hostname)" "$STAGE"
+run_restic "restic forget/prune failed (snapshots were written, retention was not applied)" \
+  forget --tag finoverview --prune --keep-daily 14 --keep-weekly 8 --keep-monthly 24
+run_restic "restic check found a problem — do NOT trust this repo until 'restic check --read-data' passes" \
+  check --read-data-subset=5%
 
 echo "backup ok $(date -Is)"
