@@ -19,7 +19,11 @@ liquid      = true
 
 # Give a manual account its IBAN and the expenses page stops counting money you
 # move into it as spending. Only needed for accounts Enable Banking can't see —
-# linked accounts learn their own IBAN on the first collect.
+# linked accounts learn their own IBAN on the first collect. For an account that
+# is yours but is not an [[asset]] here (a brokerage whose value comes from the
+# broker's own API, a current account at a bank you have linked), declare the
+# IBAN under [[own_iban]] at the bottom of this file instead — an [[asset]] block
+# would add its balance to net worth a second time.
 [[asset]]
 key         = "crelan-savings"
 label       = "Crelan savings"
@@ -37,6 +41,18 @@ kind        = "other"
 value       = -182000.00
 currency    = "EUR"
 liquid      = false
+
+# Every IBAN you own. A transfer between any two of these is money changing
+# pockets, so the expenses page drops both the outgoing and the incoming leg:
+# only what enters or leaves this network counts as income or spending.
+# Spacing and case don't matter, they are folded before comparison.
+[[own_iban]]
+iban  = "NL00BANK0123456789"
+label = "Rabobank current"
+
+[[own_iban]]
+iban  = "BE00000000000001"
+label = "Broker cash account"
 
 # Keys are "provider:external_id" — collectors print these on first run.
 [account_override."enablebanking:REPLACE_WITH_KBC_SAVINGS_UID"]

@@ -103,6 +103,13 @@ class AssetsConfig:
         return self.raw.get("recurring", [])
 
     @property
+    def own_ibans(self) -> list[dict[str, Any]]:
+        """Accounts that are mine but that no collector can identify by IBAN —
+        brokers whose API has no IBAN field, banks not linked yet. Transfers to and
+        from these are internal moves, so the expenses page must not count them."""
+        return self.raw.get("own_iban", [])
+
+    @property
     def cash_flows(self) -> list[dict[str, Any]]:
         """Manually recorded portfolio deposits/withdrawals, for when the broker
         API can't give you them. Needed for correct MWR."""

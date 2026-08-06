@@ -150,6 +150,42 @@ def top_payees(conn: sqlite3.Connection, base: str = "EUR", months: int = 12,
     return out[:limit]
 
 
+def internal(conn: sqlite3.Connection, base: str = "EUR", months: int = 12) -> dict:
+    """What the own-account filter took out of the figures above.
+
+    Only the outgoing legs are summed. A transfer between two accounts we collect
+    is booked twice — once leaving, once arriving — so adding both would report a
+    €500 sweep as €1000 moved. `accounts` counts the IBANs currently treated as
+    mine, which is the number to check when a transfer you expected to vanish
+    didn't: the filter can only neutralize an account it knows about.
+    """
+    since = _months_ago(months)
+    rows = conn.execute(
+        """
+        SELECT currency,
+               SUM(CASE WHEN amount_minor < 0 THEN -amount_minor ELSE 0 END) AS moved_minor,
+               COUNT(*)                                                      AS n
+        FROM internal_transfers
+        WHERE booking_date >= ?
+        GROUP BY currency
+        """,
+        (since,),
+    ).fetchall()
+
+    today = date.today().isoformat()
+    moved = sum(
+        convert_minor(conn, int(r["moved_minor"]), r["currency"], base, today)
+        for r in rows
+    )
+    return {
+        "moved": from_minor(moved),
+        "count": sum(int(r["n"]) for r in rows),
+        "accounts": conn.execute(
+            "SELECT COUNT(*) AS n FROM own_iban_registry"
+        ).fetchone()["n"],
+    }
+
+
 def summary(conn: sqlite3.Connection, base: str = "EUR", months: int = 12) -> dict:
     """Headline figures. `average` deliberately excludes the current month, which
     is always partial and would drag the comparison down every time you look."""
@@ -176,6 +212,7 @@ def summary(conn: sqlite3.Connection, base: str = "EUR", months: int = 12) -> di
         "tx_count": conn.execute(
             "SELECT COUNT(*) AS n FROM transactions"
         ).fetchone()["n"],
+        "internal": internal(conn, base, months=months),
         "coverage": conn.execute(
             "SELECT MIN(booking_date) AS a, MAX(booking_date) AS b FROM transactions"
         ).fetchone(),

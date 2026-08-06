@@ -1,1 +1,2 @@
 - use an actual repo and ORM instead of sql as string
+- expenses is ass right now: bad oveerview, also including my own acccs (saxo seelf inveeest, kbc, ..) also not including kbc i believe? only three rent payments from rabo show up, nothing from kbc it sems

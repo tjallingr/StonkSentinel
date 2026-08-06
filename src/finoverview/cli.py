@@ -188,7 +188,9 @@ def cmd_expenses(args, settings, conn) -> int:
     cov = s["coverage"]
     if cov and cov["a"]:
         print(f"\n{s['tx_count']} transactions, {cov['a']} → {cov['b']}")
-    print("Transfers between your own accounts are excluded.")
+    itr = s["internal"]
+    print(f"{itr['count']} transfers between your own accounts excluded "
+          f"({itr['moved']:,.2f} {base} moved), {itr['accounts']} own IBANs registered.")
     return 0
 
 

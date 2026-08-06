@@ -26,6 +26,20 @@ def from_minor(minor: int, exponent: int = 2) -> float:
     return minor / (10**exponent)
 
 
+def normalize_iban(value: str | None) -> str | None:
+    """Fold an IBAN to its comparable form: upper-case, no separators.
+
+    Banks disagree on presentation — "BE54 0636 2680 0897", "be54-0636-2680-0897"
+    and "BE54063626800897" all reach us for the same account. Own-account matching
+    is string equality, so every IBAN is folded on the way into the database and
+    again on the way into a comparison. Returns None for anything empty.
+    """
+    if not value:
+        return None
+    folded = "".join(ch for ch in value.upper() if ch.isalnum())
+    return folded or None
+
+
 def connect(path: str | Path) -> sqlite3.Connection:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

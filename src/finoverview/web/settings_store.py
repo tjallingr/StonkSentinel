@@ -2,6 +2,8 @@ from pathlib import Path
 
 import tomlkit
 
+from ..db import normalize_iban
+
 
 def _category_table(c: dict) -> tomlkit.items.Table:
     t = tomlkit.table()
@@ -158,7 +160,7 @@ def parse_assets_form(form) -> list[dict]:
             "liquid": liquid == "true",
         }
         if iban.strip():
-            asset["iban"] = iban.replace(" ", "").upper()
+            asset["iban"] = normalize_iban(iban)
         if as_of.strip():
             asset["as_of"] = as_of.strip()
         if yld.strip():

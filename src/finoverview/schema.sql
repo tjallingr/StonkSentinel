@@ -133,6 +133,20 @@ CREATE TABLE IF NOT EXISTS recurring (
     updated_at   TEXT    NOT NULL
 );
 
+-- IBANs that are mine, declared in config/assets.toml as [[own_iban]] blocks and
+-- mirrored here by the manual collector. This is the answer to "which accounts
+-- form my own asset network" for accounts that no collector can tell us about:
+-- Saxo's API never returns an IBAN, and a bank you have linked can still be the
+-- destination of a transfer months before its own consent is granted.
+--
+-- Stored normalized (upper-case, no separators) so a match never depends on how
+-- one bank chose to space out the counterparty field.
+CREATE TABLE IF NOT EXISTS own_ibans (
+    iban       TEXT PRIMARY KEY,
+    label      TEXT,
+    updated_at TEXT NOT NULL
+);
+
 -- Enable Banking sessions. valid_until is the PSD2 consent expiry you must renew.
 CREATE TABLE IF NOT EXISTS provider_sessions (
     id           INTEGER PRIMARY KEY,
@@ -153,8 +167,20 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
     updated_at         TEXT NOT NULL
 );
 
+-- Views are DROPped before being CREATEd, unlike the tables above. A view holds no
+-- data, so recreating it on every init is free — and `CREATE VIEW IF NOT EXISTS`
+-- would silently leave an old definition in place on a database that already
+-- exists, which is exactly when a fix to one of these needs to land.
+DROP VIEW IF EXISTS latest_balances;
+DROP VIEW IF EXISTS latest_positions;
+DROP VIEW IF EXISTS expenses;
+DROP VIEW IF EXISTS internal_transfers;
+DROP VIEW IF EXISTS external_transactions;
+DROP VIEW IF EXISTS own_iban_registry;
+DROP VIEW IF EXISTS collector_health;
+
 -- Most recent balance per account.
-CREATE VIEW IF NOT EXISTS latest_balances AS
+CREATE VIEW latest_balances AS
 SELECT b.*
 FROM balance_snapshots b
 JOIN (
@@ -164,7 +190,7 @@ JOIN (
 ) m ON m.account_id = b.account_id AND m.ts = b.ts;
 
 -- Most recent position set per account.
-CREATE VIEW IF NOT EXISTS latest_positions AS
+CREATE VIEW latest_positions AS
 SELECT p.*
 FROM position_snapshots p
 JOIN (
@@ -173,25 +199,48 @@ JOIN (
     GROUP BY account_id
 ) m ON m.account_id = p.account_id AND m.ts = p.ts;
 
+-- Every IBAN that belongs to me, from both sources: the ones collectors learned
+-- on their own (accounts.iban) and the ones declared by hand (own_ibans).
+-- Normalized on the way out so both sides of the comparison below are folded the
+-- same way — banks are inconsistent about spacing IBANs, and an unfolded compare
+-- turns "BE54 0636 2680 0897" into a stranger you appear to pay every month.
+CREATE VIEW own_iban_registry AS
+SELECT iban FROM own_ibans WHERE iban <> ''
+UNION
+SELECT UPPER(REPLACE(REPLACE(REPLACE(iban, ' ', ''), '-', ''), '.', ''))
+FROM accounts
+WHERE iban IS NOT NULL AND TRIM(iban) <> '';
+
 -- Transactions with transfers between your own accounts removed, both directions.
 -- A KBC -> Rabobank sweep is not an expense, and counting it would roughly double
--- the monthly figure. Own IBANs come from accounts.iban, which the Enable Banking
--- collector fills in automatically; add `iban = "..."` to an [[asset]] block for
--- accounts it cannot see (a savings account at a bank you haven't linked).
-CREATE VIEW IF NOT EXISTS external_transactions AS
+-- the monthly figure — the same move is booked twice, once as spend on the account
+-- it left and once as income on the account it landed in. Neither side survives
+-- here: only money entering or leaving the network as a whole is real.
+CREATE VIEW external_transactions AS
 SELECT t.*, a.label AS account_label, a.institution
 FROM transactions t
 JOIN accounts a ON a.id = t.account_id
 WHERE t.counterparty_iban IS NULL
-   OR t.counterparty_iban NOT IN
-      (SELECT iban FROM accounts WHERE iban IS NOT NULL AND iban <> '');
+   OR UPPER(REPLACE(REPLACE(REPLACE(t.counterparty_iban, ' ', ''), '-', ''), '.', ''))
+      NOT IN (SELECT iban FROM own_iban_registry);
+
+-- The complement: money shuffled inside the network. Not spend, but worth being
+-- able to see — a neutralization you can't inspect is indistinguishable from a
+-- collector that silently dropped the rows.
+CREATE VIEW internal_transfers AS
+SELECT t.*, a.label AS account_label, a.institution
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+WHERE t.counterparty_iban IS NOT NULL
+  AND UPPER(REPLACE(REPLACE(REPLACE(t.counterparty_iban, ' ', ''), '-', ''), '.', ''))
+      IN (SELECT iban FROM own_iban_registry);
 
 -- Money that actually left the household.
-CREATE VIEW IF NOT EXISTS expenses AS
+CREATE VIEW expenses AS
 SELECT * FROM external_transactions WHERE amount_minor < 0;
 
 -- Freshness per collector: the dashboard's staleness indicator reads this.
-CREATE VIEW IF NOT EXISTS collector_health AS
+CREATE VIEW collector_health AS
 SELECT r.collector,
        r.started_at,
        r.finished_at,

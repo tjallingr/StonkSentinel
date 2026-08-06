@@ -2,7 +2,7 @@
 
 Personal finance dashboard that runs on a Raspberry Pi. Pulls balances from my banks (Enable Banking / PSD2) and Saxo, stores snapshots in SQLite, and shows net worth, returns, and some rough projections in a small FastAPI web UI.
 
-Also logs bank transactions and breaks down where the money goes — `/expenses`, or `finoverview expenses`. Grouped by counterparty IBAN, so "who do I pay the most" is answered by account number rather than by whatever name the bank printed that month. Transfers between my own accounts don't count as spending.
+Also logs bank transactions and breaks down where the money goes — `/expenses`, or `finoverview expenses`. Grouped by counterparty IBAN, so "who do I pay the most" is answered by account number rather than by whatever name the bank printed that month. Transfers between my own accounts don't count as spending: both legs are dropped, so only money entering or leaving the network as a whole registers as income or expense. Collectors register their own IBAN where the API exposes one; the rest go under `[[own_iban]]` in `config/assets.toml` and take effect on the next `make collect`.
 
 
 Reach it on the LAN or from my phone over Tailscale.

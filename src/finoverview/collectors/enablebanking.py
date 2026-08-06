@@ -200,17 +200,22 @@ def _pick_balance(balances: list[dict]) -> dict | None:
 
 
 def _iban_of(acct: dict | None) -> str | None:
-    """IBAN, or the bank's local account number when there is no IBAN."""
+    """IBAN, or the bank's local account number when there is no IBAN.
+
+    Folded on the way out: own-account matching compares this against the IBANs you
+    declared, and a bank that spaces its counterparty IBANs would otherwise never
+    match one written without spaces.
+    """
     if not acct:
         return None
-    iban = (acct.get("iban") or "").strip()
+    iban = db.normalize_iban(acct.get("iban"))
     if iban:
-        return iban.upper()
+        return iban
     other = acct.get("other")
     if isinstance(other, list):
         other = other[0] if other else None
     if isinstance(other, dict):
-        return (other.get("identification") or "").strip().upper() or None
+        return db.normalize_iban(other.get("identification"))
     return None
 
 
@@ -365,7 +370,7 @@ class EnableBankingCollector(Collector):
                 currency = known["currency"]
             else:
                 acct = client.details(uid)
-                iban = ((acct.get("account_id") or {}).get("iban") or "").upper()
+                iban = db.normalize_iban((acct.get("account_id") or {}).get("iban")) or ""
                 name = acct.get("name") or acct.get("product") or "Account"
                 label = f"{name} {iban[-4:]}" if iban else name
                 kind = _guess_kind(acct)

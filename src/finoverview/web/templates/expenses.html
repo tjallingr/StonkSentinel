@@ -133,7 +133,10 @@
     {% if summary.coverage and summary.coverage.a %}
       · {{ summary.coverage.a }} → {{ summary.coverage.b }}
     {% endif %}
-    · transfers between your own accounts are excluded
+    · {{ summary.internal.count }} transfer{{ "" if summary.internal.count == 1 else "s" }}
+      between your own accounts excluded
+    {%- if summary.internal.moved %} ({{ summary.internal.moved | money }} {{ base }} moved){% endif %}
+    · {{ summary.internal.accounts }} own IBAN{{ "" if summary.internal.accounts == 1 else "s" }} registered
   </p>
 </section>
 {% endif %}

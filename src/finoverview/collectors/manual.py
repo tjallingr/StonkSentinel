@@ -36,7 +36,7 @@ class ManualCollector(Collector):
                 institution=asset.get("institution", "Manual"),
                 # Optional. Giving a manual account its IBAN is what stops transfers
                 # into it being counted as expenses — see the expenses view.
-                iban=(asset.get("iban") or "").replace(" ", "").upper() or None,
+                iban=db.normalize_iban(asset.get("iban")),
                 label=asset["label"],
                 kind=asset.get("kind", "other"),
                 currency=asset["currency"].upper(),
@@ -55,6 +55,37 @@ class ManualCollector(Collector):
                 run_id=run_id,
             ):
                 rows += 1
+
+        # --- own IBANs ----------------------------------------------------
+        # Mirrored from config rather than accumulated: an IBAN removed from the
+        # TOML has to stop being treated as mine, or a closed account keeps
+        # swallowing real payments to whoever holds that number next. Deleting is
+        # safe here — unlike `recurring`, nothing references these rows, and the
+        # transactions they filter are untouched.
+        own: dict[str, str | None] = {}
+        for item in self.assets.own_ibans:
+            iban = db.normalize_iban(item.get("iban") if isinstance(item, dict) else item)
+            if not iban:
+                raise ValueError(f"[[own_iban]] needs a non-empty 'iban': {item}")
+            own[iban] = (item.get("label") if isinstance(item, dict) else None) or None
+
+        for iban, label in own.items():
+            self.conn.execute(
+                """
+                INSERT INTO own_ibans (iban, label, updated_at) VALUES (?,?,?)
+                ON CONFLICT (iban) DO UPDATE SET
+                    label = excluded.label, updated_at = excluded.updated_at
+                """,
+                (iban, label, ts),
+            )
+            rows += 1
+        if own:
+            placeholders = ",".join("?" * len(own))
+            self.conn.execute(
+                f"DELETE FROM own_ibans WHERE iban NOT IN ({placeholders})", list(own)
+            )
+        else:
+            self.conn.execute("DELETE FROM own_ibans")
 
         # --- recurring costs / incomes -----------------------------------
         seen: set[str] = set()
