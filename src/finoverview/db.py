@@ -74,9 +74,20 @@ def _migrate(conn: sqlite3.Connection) -> None:
             conn.execute(sql)
 
 
+# Bump this whenever schema.sql changes. It is what stops init_db from being run
+# on every connection: the views are DROPped and recreated, and doing that under
+# a live reader — the web app serves requests from a threadpool — deletes a view
+# out from under a query that is already running. Gating on the version means the
+# rebuild happens once per deploy instead of once per request.
+SCHEMA_VERSION = 2
+
+
 def init_db(conn: sqlite3.Connection) -> None:
+    if conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION:
+        return
     _migrate(conn)
     conn.executescript(SCHEMA_PATH.read_text())
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
 def upsert_account(

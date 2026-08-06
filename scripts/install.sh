@@ -46,6 +46,15 @@ sudo "$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 sudo cp "$REPO"/systemd/*.service "$REPO"/systemd/*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 
+# daemon-reload only reloads the unit definitions; a running service keeps the
+# namespace, environment and sandbox it was started with. Changing something
+# like ReadWritePaths and not restarting looks exactly like the change not
+# working, so restart it here rather than leaving it as a step to forget.
+if systemctl is-active --quiet finoverview-web.service; then
+  sudo systemctl restart finoverview-web.service
+  echo "restarted finoverview-web.service"
+fi
+
 echo
 echo "Installed to $APP_DIR"
 echo "Next:"

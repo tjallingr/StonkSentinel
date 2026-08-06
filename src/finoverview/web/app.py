@@ -59,10 +59,23 @@ templates.env.filters["signed"] = signed
 templates.env.globals["version"] = __import__("finoverview").__version__
 
 
-def get_conn() -> sqlite3.Connection:
+@app.on_event("startup")
+def _prepare_schema() -> None:
+    """Bring the schema up to date once, at startup, on a single thread.
+
+    Not per request: init_db recreates the views, and requests are served from a
+    threadpool, so a rebuild racing a live query makes pages fail intermittently
+    with "no such table". Startup is the only moment nothing else is reading.
+    """
     conn = db.connect(settings.db_path)
-    db.init_db(conn)
-    return conn
+    try:
+        db.init_db(conn)
+    finally:
+        conn.close()
+
+
+def get_conn() -> sqlite3.Connection:
+    return db.connect(settings.db_path)
 
 
 @app.get("/", response_class=HTMLResponse)
