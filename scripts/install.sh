@@ -23,6 +23,20 @@ sudo mkdir -p "$APP_DIR/data" "$APP_DIR/secrets"
 sudo chown -R finoverview:finoverview "$APP_DIR/data" "$APP_DIR/secrets"
 sudo chmod 700 "$APP_DIR/secrets" "$APP_DIR/data"
 
+# config/ too: the settings pages write assets.toml, so the web process must own
+# it. Copying the example files in with `sudo cp` leaves them root-owned, which
+# makes every save in the UI fail with a permission error. 750, not 700 — you
+# still want to read these over SSH as yourself without sudo.
+sudo chown -R finoverview:finoverview "$APP_DIR/config"
+sudo chmod 750 "$APP_DIR/config"
+# settings.toml can hold API secrets when they are not in /etc/finoverview/env.
+# `if`, not `[ ... ] && ...`: under `set -e` a false test as the last command of
+# an AND-list aborts the script, so a missing file would silently stop the
+# install here — before any unit was deployed.
+if [ -f "$APP_DIR/config/settings.toml" ]; then
+  sudo chmod 640 "$APP_DIR/config/settings.toml"
+fi
+
 if [ ! -d "$APP_DIR/.venv" ]; then
   sudo python3 -m venv "$APP_DIR/.venv"
 fi
@@ -35,8 +49,13 @@ sudo systemctl daemon-reload
 echo
 echo "Installed to $APP_DIR"
 echo "Next:"
-echo "  1. sudo cp config/settings.example.toml $APP_DIR/config/settings.toml  # then edit"
-echo "  2. sudo cp config/assets.example.toml   $APP_DIR/config/assets.toml    # then edit"
+# `install -o finoverview`, not `sudo cp`: cp leaves the file root-owned, and the
+# settings pages then fail to save with a permission error that reads like a bug
+# in the app. Re-running this script also repairs it.
+echo "  1. sudo install -o finoverview -g finoverview -m 640 \\"
+echo "       config/settings.example.toml $APP_DIR/config/settings.toml   # then edit"
+echo "  2. sudo install -o finoverview -g finoverview -m 640 \\"
+echo "       config/assets.example.toml   $APP_DIR/config/assets.toml     # then edit"
 echo "  3. put the Enable Banking RSA key at $APP_DIR/secrets/enablebanking.pem (chmod 600)"
 echo "  4. sudo cp .env.example /etc/finoverview/env && sudo chmod 600 /etc/finoverview/env"
 echo "     then edit in your app secrets, RESTIC_* and NTFY_URL"

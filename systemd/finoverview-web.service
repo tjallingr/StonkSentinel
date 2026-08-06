@@ -27,7 +27,12 @@ ProtectControlGroups=yes
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 RestrictNamespaces=yes
 LockPersonality=yes
-ReadWritePaths=/opt/finoverview/data
+# ProtectSystem=strict makes everything read-only except what is listed here.
+# config/ has to be writable because the settings pages edit assets.toml — the
+# projection horizon, asset values, Saxo categories. Without it every save in
+# the UI fails with a permission error that looks like a file-ownership problem
+# and isn't: the file is fine, the mount namespace is read-only.
+ReadWritePaths=/opt/finoverview/data /opt/finoverview/config
 CapabilityBoundingSet=
 SystemCallFilter=@system-service
 
